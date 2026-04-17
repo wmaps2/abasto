@@ -338,11 +338,13 @@ def _load_stock() -> pd.DataFrame:
 
 
 def _get_override_hash() -> str:
-    """Hash del archivo overrides.json para invalidar caché cuando cambian los overrides."""
-    _path = _DATA_DIR / "overrides.json"
-    if not _path.exists():
+    """Hash de los overrides activos en Supabase para invalidar caché cuando cambian."""
+    try:
+        ovr = overrides_module.load()
+        payload = str(sorted(str(ovr).split())).encode()
+        return hashlib.md5(payload).hexdigest()
+    except Exception:
         return ""
-    return hashlib.md5(_path.read_bytes()).hexdigest()
 
 
 @st.cache_data(show_spinner=False)
