@@ -1289,7 +1289,7 @@ with tab_sandbox:
         _sb_dates      = [_sb_last_mon - pd.Timedelta(weeks=7 - i) for i in range(8)]
         _default_sandbox = pd.DataFrame({
             "fecha":    _sb_dates,
-            "cantidad": [0.0] * 8,
+            "cantidad": [None] * 8,
         })
         edited_sandbox = st.data_editor(
             _default_sandbox,
@@ -1307,7 +1307,7 @@ with tab_sandbox:
             key="sandbox_editor",
         )
 
-        n_filled = int((edited_sandbox["cantidad"] > 0).sum())
+        n_filled = int(edited_sandbox["cantidad"].notna().sum())
         st.caption(f"{n_filled} / 8 semanas con datos · mínimo 4 para correr modelo")
 
         run_sandbox = st.button(

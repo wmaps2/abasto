@@ -556,7 +556,7 @@ def run_sandbox_forecast(
     Retorna (hist_df, fc_df, mape, bias, model_info).
     mape/bias son None si hay menos de 16 semanas con datos.
     """
-    valid = (edited[edited["cantidad"] > 0]
+    valid = (edited[edited["cantidad"].notna()]
              .sort_values("fecha")
              .reset_index(drop=True))
     n = len(valid)
