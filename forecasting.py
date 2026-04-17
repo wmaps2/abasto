@@ -219,12 +219,12 @@ def _sb_read_forecast() -> dict | None:
         df = pd.DataFrame(rows)
         df["ds"] = pd.to_datetime(df["fecha_target"])
         df = df.rename(columns={
-            "sku_id":         "unique_id",
-            "valor_efectivo": PRIMARY,
-            "ic_70_lower":    f"{PRIMARY}-lo-70",
-            "ic_70_upper":    f"{PRIMARY}-hi-70",
-            "ic_95_lower":    f"{PRIMARY}-lo-95",
-            "ic_95_upper":    f"{PRIMARY}-hi-95",
+            "sku_id":      "unique_id",
+            "valor_base":  PRIMARY,          # puro modelo, sin overrides aplicados
+            "ic_70_lower": f"{PRIMARY}-lo-70",
+            "ic_70_upper": f"{PRIMARY}-hi-70",
+            "ic_95_lower": f"{PRIMARY}-lo-95",
+            "ic_95_upper": f"{PRIMARY}-hi-95",
         })
         want = ["unique_id", "ds", PRIMARY,
                 f"{PRIMARY}-lo-70", f"{PRIMARY}-hi-70",
