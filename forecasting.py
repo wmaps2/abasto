@@ -290,7 +290,7 @@ def _to_sf(df: pd.DataFrame) -> pd.DataFrame:
     out = (df
            .rename(columns={"sku": "unique_id", "fecha": "ds", "cantidad": "y"})
            .assign(ds=lambda x: pd.to_datetime(x["ds"]),
-                   y =lambda x: x["y"].clip(lower=0))
+                   y =lambda x: pd.to_numeric(x["y"], errors="coerce").clip(lower=0))
            [["unique_id", "ds", "y"]]
            .sort_values(["unique_id", "ds"]))
     return out
