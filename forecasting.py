@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import pickle
 import time
 from datetime import timedelta
 
@@ -44,9 +43,6 @@ LEVELS         = [70, 95]       # intervalos de confianza
 PRIMARY        = "AutoETS"
 BENCHMARK      = "SeasonalNaive"
 
-CACHE_DIR      = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
-CACHE_MAX_AGE  = timedelta(days=7)
-_CACHE_KEYS    = {"forecasts", "cv", "metrics", "fc_hist", "model_info", "computed_at", "ets_params", "cv_skipped"}
 
 
 # ---------------------------------------------------------------------------
@@ -148,42 +144,127 @@ def _normalize_columns(fc: pd.DataFrame, minfo: ModelInfo) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Caché en disco
+# Supabase persistence
 # ---------------------------------------------------------------------------
 def _df_hash(df: pd.DataFrame) -> str:
     return hashlib.md5(pd.util.hash_pandas_object(df, index=True).values).hexdigest()
 
 
-def _cache_file(df_hash: str) -> str:
-    return os.path.join(CACHE_DIR, f"{df_hash}.pkl")
-
-
-def _read_cache(df_hash: str) -> dict | None:
-    path = _cache_file(df_hash)
-    if not os.path.exists(path):
-        return None
+def _sb_client():
     try:
-        with open(path, "rb") as f:
-            cached = pickle.load(f)
+        import streamlit as st
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+    except Exception:
+        import tomllib
+        from pathlib import Path
+        secrets_path = Path(__file__).parent / ".streamlit" / "secrets.toml"
+        with open(secrets_path, "rb") as f:
+            s = tomllib.load(f)
+        url, key = s["SUPABASE_URL"], s["SUPABASE_KEY"]
+    from supabase import create_client
+    return create_client(url, key)
+
+
+def _minfo_from_name(name: str) -> ModelInfo:
+    mapping = {"Theta": 4, "Holt": 9, "AutoETS · s=4": 16,
+               "AutoETS · s=13": 28, "AutoETS · s=52": 52}
+    return select_model(mapping.get(name, 52))
+
+
+def _sb_write_forecast(fc_df: pd.DataFrame, minfo: ModelInfo,
+                        computed_at: pd.Timestamp) -> None:
+    """Inserta una fila por (sku_id, fecha_target) en la tabla forecasts."""
+    sb = _sb_client()
+    ts = computed_at.isoformat()
+
+    def _f(row, col):
+        v = row.get(col)
+        return float(v) if v is not None and pd.notna(v) else None
+
+    rows = []
+    for sku, grp in fc_df.groupby("unique_id"):
+        for h, (_, row) in enumerate(grp.sort_values("ds").iterrows(), start=1):
+            rows.append({
+                "sku_id":         sku,
+                "fecha_calculo":  ts,
+                "fecha_target":   row["ds"].strftime("%Y-%m-%d"),
+                "horizonte":      h,
+                "valor":          _f(row, PRIMARY),
+                "modelo":         minfo.name,
+                "modelo_version": "v1",
+                "ic_70_lower":    _f(row, f"{PRIMARY}-lo-70"),
+                "ic_70_upper":    _f(row, f"{PRIMARY}-hi-70"),
+                "ic_95_lower":    _f(row, f"{PRIMARY}-lo-95"),
+                "ic_95_upper":    _f(row, f"{PRIMARY}-hi-95"),
+            })
+    sb.table("forecasts").insert(rows).execute()
+
+
+def _sb_read_forecast() -> dict | None:
+    """
+    Lee de forecast_vigente si hay un forecast calculado en las últimas 24h.
+    cv / metrics / fc_hist / ets_params quedan vacíos — requieren Forzar recálculo.
+    """
+    try:
+        sb = _sb_client()
+        cutoff = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=24)).isoformat()
+        rows = (sb.table("forecast_vigente")
+                  .select("*")
+                  .gte("fecha_calculo", cutoff)
+                  .execute().data)
+        if not rows:
+            return None
+
+        df = pd.DataFrame(rows)
+        df["ds"] = pd.to_datetime(df["fecha_target"])
+        df = df.rename(columns={
+            "sku_id":         "unique_id",
+            "valor_efectivo": PRIMARY,
+            "ic_70_lower":    f"{PRIMARY}-lo-70",
+            "ic_70_upper":    f"{PRIMARY}-hi-70",
+            "ic_95_lower":    f"{PRIMARY}-lo-95",
+            "ic_95_upper":    f"{PRIMARY}-hi-95",
+        })
+        want = ["unique_id", "ds", PRIMARY,
+                f"{PRIMARY}-lo-70", f"{PRIMARY}-hi-70",
+                f"{PRIMARY}-lo-95", f"{PRIMARY}-hi-95"]
+        fc_df = df[[c for c in want if c in df.columns]].copy()
+
+        computed_at = pd.Timestamp(df["fecha_calculo"].max())
+        minfo = _minfo_from_name(df["modelo"].iloc[0] if "modelo" in df.columns else "AutoETS · s=52")
+
+        return dict(
+            forecasts    = fc_df,
+            cv           = pd.DataFrame(),
+            metrics      = {},
+            fc_hist      = pd.DataFrame(),
+            model_info   = minfo,
+            ets_params   = {},
+            cv_skipped   = [],
+            computed_at  = computed_at,
+            from_supabase= True,
+        )
     except Exception:
         return None
-    if not _CACHE_KEYS.issubset(cached.keys()):
-        return None  # formato obsoleto, ignorar
-    age = pd.Timestamp.now() - cached["computed_at"]
-    if age > CACHE_MAX_AGE:
-        return None
-    return cached
-
-
-def _write_cache(df_hash: str, results: dict) -> None:
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    with open(_cache_file(df_hash), "wb") as f:
-        pickle.dump(results, f)
 
 
 def cache_status(df: pd.DataFrame) -> dict | None:
-    """Retorna el caché válido si existe y no expiró (<7 días), sino None."""
-    return _read_cache(_df_hash(df))
+    """Retorna info de caché si existe un forecast en Supabase de las últimas 24h."""
+    try:
+        sb = _sb_client()
+        cutoff = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=24)).isoformat()
+        rows = (sb.table("forecasts")
+                  .select("fecha_calculo")
+                  .gte("fecha_calculo", cutoff)
+                  .limit(1)
+                  .execute().data)
+        if rows:
+            return {"from_cache": True,
+                    "computed_at": pd.Timestamp(rows[0]["fecha_calculo"])}
+        return None
+    except Exception:
+        return None
 
 
 def get_ets_model_params(df: pd.DataFrame, minfo: ModelInfo) -> dict[str, str]:
@@ -225,16 +306,15 @@ def get_ets_model_params(df: pd.DataFrame, minfo: ModelInfo) -> dict[str, str]:
 def get_or_compute(df: pd.DataFrame, force: bool = False) -> tuple[dict, bool]:
     """
     Retorna (results_dict, from_cache).
-    Si force=True ignora el caché y recalcula siempre.
+    Si force=True ignora Supabase y recalcula siempre.
     results_dict incluye: forecasts, cv, metrics, fc_hist, computed_at, cv_skipped.
+    Cuando se carga de Supabase, cv/metrics/fc_hist están vacíos.
 
     Series con ≥4 datos siempre reciben forecast; sólo las que tienen suficientes
     datos para la CV (≥ HORIZON*2 + min_train) participan en las métricas.
     """
-    h = _df_hash(df)
-
     if not force:
-        cached = _read_cache(h)
+        cached = _sb_read_forecast()
         if cached is not None:
             return cached, True
 
@@ -269,16 +349,20 @@ def get_or_compute(df: pd.DataFrame, force: bool = False) -> tuple[dict, bool]:
     print(f"[forecast] TOTAL             {time.time() - t0:.1f}s", flush=True)
 
     results = dict(
-        forecasts   = forecasts,
-        cv          = cv,
-        metrics     = metrics,
-        fc_hist     = fc_hist,
-        model_info  = minfo,
-        ets_params  = ets_params,
-        cv_skipped  = cv_skipped,
-        computed_at = pd.Timestamp.now(),
+        forecasts    = forecasts,
+        cv           = cv,
+        metrics      = metrics,
+        fc_hist      = fc_hist,
+        model_info   = minfo,
+        ets_params   = ets_params,
+        cv_skipped   = cv_skipped,
+        computed_at  = pd.Timestamp.now(),
+        from_supabase= False,
     )
-    _write_cache(h, results)
+    try:
+        _sb_write_forecast(results["forecasts"], minfo, results["computed_at"])
+    except Exception as e:
+        print(f"[forecast] Warning: no se pudo escribir en Supabase: {e}", flush=True)
     return results, False
 
 

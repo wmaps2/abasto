@@ -1,67 +1,97 @@
 """
 overrides.py — Gestión de overrides manuales de forecast.
-Almacena en data/overrides.json: {sku: {"YYYY-MM-DD": float, ...}}
+Persiste en Supabase tabla overrides: (sku_id, fecha_target, valor, activo).
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pandas as pd
 
-_OVERRIDE_FILE = Path(__file__).parent / "data" / "overrides.json"
+
+def _sb_client():
+    try:
+        import streamlit as st
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+    except Exception:
+        import tomllib
+        from pathlib import Path
+        secrets_path = Path(__file__).parent / ".streamlit" / "secrets.toml"
+        with open(secrets_path, "rb") as f:
+            s = tomllib.load(f)
+        url, key = s["SUPABASE_URL"], s["SUPABASE_KEY"]
+    from supabase import create_client
+    return create_client(url, key)
 
 
 def load() -> dict[str, dict[str, float]]:
-    """Devuelve {sku: {date_str: value}}. Retorna {} si no existe el archivo."""
-    if not _OVERRIDE_FILE.exists():
-        return {}
+    """
+    Retorna {sku: {"YYYY-MM-DD": float}} con los overrides activos más recientes.
+    Mismo contrato que la versión JSON anterior.
+    """
     try:
-        return json.loads(_OVERRIDE_FILE.read_text(encoding="utf-8"))
+        rows = (_sb_client()
+                .table("overrides")
+                .select("sku_id, fecha_target, valor, creado_en")
+                .eq("activo", True)
+                .order("creado_en", desc=True)
+                .execute().data)
     except Exception:
         return {}
 
-
-def save(overrides: dict[str, dict[str, float]]) -> None:
-    _OVERRIDE_FILE.write_text(json.dumps(overrides, indent=2), encoding="utf-8")
+    result: dict[str, dict[str, float]] = {}
+    seen: set[tuple] = set()
+    for r in rows:
+        key = (r["sku_id"], r["fecha_target"])
+        if key in seen:
+            continue
+        seen.add(key)
+        sku  = r["sku_id"]
+        date = str(r["fecha_target"])[:10]
+        result.setdefault(sku, {})[date] = float(r["valor"])
+    return result
 
 
 def set_sku(sku: str, rows: pd.DataFrame) -> None:
     """
     Guarda los overrides de un SKU.
     rows: DataFrame con columnas 'ds' (Timestamp) y 'override' (float | None).
-    Solo se guardan las filas donde override no es nulo.
+    Solo se insertan las filas donde override no es nulo.
+    Las semanas sin override desactivan cualquier override previo activo.
     """
-    overrides = load()
-    sku_data: dict[str, float] = {}
+    sb = _sb_client()
+
+    # Desactivar todos los overrides activos del SKU
+    sb.table("overrides").update({"activo": False}).eq("sku_id", sku).eq("activo", True).execute()
+
+    # Insertar nuevos overrides
+    to_insert = []
     for _, row in rows.iterrows():
         val = row.get("override")
         if val is not None and not pd.isna(val):
-            sku_data[str(row["ds"].date())] = float(val)
-    if sku_data:
-        overrides[sku] = sku_data
-    else:
-        overrides.pop(sku, None)
-    save(overrides)
+            to_insert.append({
+                "sku_id":       sku,
+                "fecha_target": str(row["ds"].date()),
+                "valor":        float(val),
+                "activo":       True,
+            })
+    if to_insert:
+        sb.table("overrides").insert(to_insert).execute()
 
 
 def clear_sku(sku: str) -> None:
-    overrides = load()
-    if sku in overrides:
-        del overrides[sku]
-        save(overrides)
+    """Desactiva todos los overrides activos de un SKU."""
+    _sb_client().table("overrides").update({"activo": False}).eq("sku_id", sku).eq("activo", True).execute()
 
 
 def apply(fc_df: pd.DataFrame, overrides: dict) -> pd.DataFrame:
     """
     Aplica overrides al DataFrame de forecast (columnas: unique_id, ds, AutoETS, …).
     Retorna una copia con AutoETS sustituido donde existan overrides.
-    Normaliza timestamps (quita componente horario) para comparación robusta.
     """
     if not overrides:
         return fc_df
     fc_df = fc_df.copy()
-    ds_norm = fc_df["ds"].dt.normalize()          # normalizar una vez, no en cada fila
+    ds_norm = fc_df["ds"].dt.normalize()
     for sku, date_vals in overrides.items():
         for date_str, value in date_vals.items():
             date_norm = pd.Timestamp(date_str).normalize()

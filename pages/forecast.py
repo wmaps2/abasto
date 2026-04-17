@@ -741,7 +741,8 @@ with st.sidebar:
     _cs = st.session_state.get("cache_status")
     if _cs:
         if _cs["from_cache"]:
-            _age     = pd.Timestamp.now() - _cs["computed_at"]
+            _computed = pd.Timestamp(_cs["computed_at"]).tz_localize("UTC") if pd.Timestamp(_cs["computed_at"]).tzinfo is None else pd.Timestamp(_cs["computed_at"])
+            _age     = pd.Timestamp.now(tz="UTC") - _computed
             _age_str = f"{_age.days}d" if _age.days > 0 else "hoy"
             _cache_row = (f'<div class="mc-row">Caché'
                           f'<span style="color:{C["green"]}">✓ hace {_age_str}</span></div>')
@@ -818,7 +819,7 @@ if st.session_state.get("data_hash") != current_hash:
 # ─── Run forecast ─────────────────────────────────────────────────────────────
 if run_btn or force_btn or "forecast_results" not in st.session_state:
     _has_cache = (not force_btn) and (fc_module.cache_status(df) is not None)
-    _spinner   = "Cargando desde caché…" if _has_cache else "Calculando modelo (AutoETS + CV + historial, ~60 s)…"
+    _spinner   = "Cargando forecast de Supabase…" if _has_cache else "Calculando modelo (AutoETS + CV + historial, ~60 s)…"
 
     with st.spinner(_spinner):
         try:
@@ -1000,7 +1001,12 @@ with tab_fc:
 
 # ══ Tab 2: Accuracy ═══════════════════════════════════════════════════════════
 with tab_acc:
-    if fc_module.PRIMARY in metrics:
+    if results.get("from_supabase") and not metrics:
+        st.html(
+            f'<div class="info-box">Forecast cargado de Supabase. '
+            f'Haz click en <strong>↺ Forzar recálculo</strong> para ver las métricas de accuracy.</div>'
+        )
+    elif fc_module.PRIMARY in metrics:
         cv_data = results["cv"]
 
         _H_OPTIONS = {
@@ -1188,7 +1194,12 @@ with tab_hist:
         f'fell inside or outside the 70% CI.</div>'
     )
 
-    if fc_hist.empty:
+    if results.get("from_supabase") and fc_hist.empty:
+        st.html(
+            f'<div class="info-box">Forecast cargado de Supabase. '
+            f'Haz click en <strong>↺ Forzar recálculo</strong> para ver el historial de forecasts.</div>'
+        )
+    elif fc_hist.empty:
         st.html('<div class="warn-box">Cannot generate history — insufficient data.</div>')
     else:
         col_a2, col_b2 = st.columns([1, 3])
