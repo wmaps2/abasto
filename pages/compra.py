@@ -427,6 +427,11 @@ def compute_replenishment(
         # Demand during LT+1 weeks: +1 covers reception and shelf replenishment time
         fc_grp  = fc_by_sku.get(sku, pd.DataFrame())
         fc_lt   = float(fc_grp.head(lt + 1)["AutoETS"].sum()) if not fc_grp.empty else mu * (lt + 1)
+        fc_lt_detail = (
+            [(row["ds"].strftime("%d/%m"), round(float(row["AutoETS"]), 1))
+             for _, row in fc_grp.head(lt + 1).iterrows()]
+            if not fc_grp.empty else []
+        )
 
         c_capital = precio * 0.25 / 52.0
         c_obs_sem = precio * tasa_obs
@@ -484,6 +489,7 @@ def compute_replenishment(
             fecha_trans    = fecha_trans,
             inv_pos        = disp + transito,
             fc_lt_weeks    = round(fc_lt, 1),
+            fc_lt_detail   = fc_lt_detail,
             order_qty      = order_qty,
             order_cost     = round(order_qty * costo, 2),
             semaforo       = semaforo,
@@ -1060,7 +1066,9 @@ def _render_explanation(row: pd.Series) -> None:
 
         <b>⑤ Punto de reorden</b><br>
         <code>ROP = fc_(LT+1) + SS = {fc_lt:,.1f} + {ss:,} = <b>{rop:,} u</b></code><br>
-        <small style="color:#8892a8;">— fc_(LT+1) = suma forecast próximas {lt+1} sem ({lt} sem lead time + 1 sem recepción/góndola).</small><br><br>
+        <small style="color:#8892a8;">— fc_(LT+1) = suma forecast próximas {lt+1} sem ({lt} sem lead time + 1 sem recepción/góndola).</small><br>
+        {''.join(f'<small style="color:#8892a8;">{'&nbsp;' * 4}sem {i+1} ({d}): {v:,.1f} u</small><br>' for i, (d, v) in enumerate(row.get('fc_lt_detail', [])))}
+        <small style="color:#8892a8;">{'&nbsp;' * 4}<b>Total demanda durante LT: {fc_lt:,.1f} u</b></small><br><br>
 
         <b>⑥ Posición de inventario</b><br>
         <code>Pos.Inv. = stock disp. + stock tránsito = {row['stock_disp']:,} + {row['stock_trans']:,} = <b>{pos:,} u</b></code><br>
