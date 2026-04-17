@@ -8,16 +8,16 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from supabase import create_client
 
-from simulation.generador import generate_simulated_data
-from simulation.parametros import SKU_CONFIGS
+from simulation.generador import generate_simulated_data, generar_inventario_inicial
+from simulation.parametros import SKU_CONFIGS, STOCK_CONFIGS
 
-ROOT        = Path(__file__).resolve().parent.parent
-SECRETS     = ROOT / ".streamlit" / "secrets.toml"
+ROOT          = Path(__file__).resolve().parent.parent
+SECRETS       = ROOT / ".streamlit" / "secrets.toml"
 PRODUCTOS_CSV = ROOT / "data" / "productos.csv"
-STOCK_CSV     = ROOT / "data" / "stock_actual.csv"
 
 
 def _client():
@@ -59,14 +59,26 @@ def build_historia(demanda_df: pd.DataFrame, precio_por_sku: dict[str, float]) -
     return rows
 
 
-def build_inventario(df: pd.DataFrame) -> list[dict]:
+def build_inventario(prod_df: pd.DataFrame, dem_df: pd.DataFrame) -> list[dict]:
+    rng = np.random.default_rng(seed=42)
     rows = []
-    for _, r in df.iterrows():
+    for _, r in prod_df.iterrows():
+        sku      = r["sku"]
+        cat      = sku.split("-")[1][0]
+        lt       = int(r["lead_time_semanas"])
+        ventana  = STOCK_CONFIGS[cat]["ventana_mu"]
+        mu       = float(
+            dem_df[dem_df["sku"] == sku]
+            .sort_values("fecha")
+            .tail(ventana)["cantidad"]
+            .mean()
+        )
+        stock, transito, fecha = generar_inventario_inicial(sku, mu, cat, lt, rng)
         rows.append({
-            "sku_id":                 r["sku"],
-            "stock_disponible":       float(r["stock_disponible"]),
-            "en_transito":            float(r["stock_transito"]),
-            "fecha_llegada_transito": r["fecha_llegada_transito"],
+            "sku_id":                 sku,
+            "stock_disponible":       float(stock),
+            "en_transito":            float(transito),
+            "fecha_llegada_transito": fecha,
         })
     return rows
 
@@ -74,15 +86,14 @@ def build_inventario(df: pd.DataFrame) -> list[dict]:
 def main():
     sb = _client()
 
-    prod_df  = pd.read_csv(PRODUCTOS_CSV)
-    stock_df = pd.read_csv(STOCK_CSV)
-    dem_df   = generate_simulated_data()
+    prod_df = pd.read_csv(PRODUCTOS_CSV)
+    dem_df  = generate_simulated_data()
 
     precio_por_sku = dict(zip(prod_df["sku"], prod_df["precio_venta"].astype(float)))
 
-    n1 = _upsert(sb, "productos",      build_productos(prod_df),                  "sku_id")
-    n2 = _upsert(sb, "historia_semanal", build_historia(dem_df, precio_por_sku),  "sku_id,fecha")
-    n3 = _upsert(sb, "inventario",     build_inventario(stock_df),                "sku_id")
+    n1 = _upsert(sb, "productos",        build_productos(prod_df),               "sku_id")
+    n2 = _upsert(sb, "historia_semanal", build_historia(dem_df, precio_por_sku), "sku_id,fecha")
+    n3 = _upsert(sb, "inventario",       build_inventario(prod_df, dem_df),      "sku_id")
 
     print(f"productos:        {n1} filas")
     print(f"historia_semanal: {n2} filas")

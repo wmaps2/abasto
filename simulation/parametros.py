@@ -43,3 +43,17 @@ SKU_CONFIGS: dict[str, dict] = {
     "SKU-C002": {"base":  18, "trend": 0.08, "pattern": "christmas", "amp":  8, "noise":  3, "cv_demanda": 0.108},
     "SKU-C003": {"base":   8, "trend": 0.03, "pattern": "christmas", "amp":  3, "noise":  2, "cv_demanda": 0.146},
 }
+
+# ---------------------------------------------------------------------------
+# Por categoría: parámetros de inventario inicial
+# ---------------------------------------------------------------------------
+# semanas_inventario → cobertura objetivo del stock disponible
+# semanas_transito   → cobertura objetivo del pedido en tránsito
+# ruido_relativo     → variación uniforme ± aplicada sobre el target
+# ventana_mu         → semanas recientes usadas para estimar demanda actual (μ)
+
+STOCK_CONFIGS: dict[str, dict] = {
+    "A": {"semanas_inventario": 4, "semanas_transito": 1, "ruido_relativo": 0.20, "ventana_mu": 12},
+    "B": {"semanas_inventario": 6, "semanas_transito": 2, "ruido_relativo": 0.20, "ventana_mu": 12},
+    "C": {"semanas_inventario": 8, "semanas_transito": 3, "ruido_relativo": 0.20, "ventana_mu": 26},
+}

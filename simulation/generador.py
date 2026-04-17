@@ -1,10 +1,12 @@
-"""Generador de demanda histórica simulada."""
+"""Generador de demanda histórica simulada e inventario inicial."""
 from __future__ import annotations
+
+from datetime import timedelta
 
 import numpy as np
 import pandas as pd
 
-from simulation.parametros import RANDOM_SEED, N_SEMANAS, FREQ, SKU_CONFIGS
+from simulation.parametros import RANDOM_SEED, N_SEMANAS, FREQ, SKU_CONFIGS, STOCK_CONFIGS
 
 
 def _seasonal(week_idx: int, pattern: str, amp: float) -> float:
@@ -46,3 +48,26 @@ def generate_simulated_data() -> pd.DataFrame:
             records.append({"fecha": date, "sku": sku, "cantidad": round(qty, 1)})
 
     return pd.DataFrame(records)
+
+
+def generar_inventario_inicial(
+    sku: str,
+    mu: float,
+    categoria: str,
+    lead_time: int,
+    rng: np.random.Generator,
+) -> tuple[int, int, str]:
+    """
+    Retorna (stock_disponible, en_transito, fecha_llegada_transito) para un SKU.
+    mu = demanda media de las últimas ventana_mu semanas simuladas.
+    """
+    cfg          = STOCK_CONFIGS[categoria]
+    ultimo_lunes = _last_monday()
+
+    stock   = mu * cfg["semanas_inventario"] * (1 + rng.uniform(-cfg["ruido_relativo"], cfg["ruido_relativo"]))
+    transito = mu * cfg["semanas_transito"]  * (1 + rng.uniform(-cfg["ruido_relativo"], cfg["ruido_relativo"]))
+
+    semanas_hasta_llegada = int(rng.integers(1, lead_time + 1))
+    fecha_llegada         = ultimo_lunes + timedelta(weeks=semanas_hasta_llegada)
+
+    return round(stock), round(transito), fecha_llegada.strftime("%Y-%m-%d")
