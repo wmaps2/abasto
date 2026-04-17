@@ -1067,8 +1067,8 @@ def _render_explanation(row: pd.Series) -> None:
         <b>⑤ Punto de reorden</b><br>
         <code>ROP = fc_(LT+1) + SS = {fc_lt:,.1f} + {ss:,} = <b>{rop:,} u</b></code><br>
         <small style="color:#8892a8;">— fc_(LT+1) = suma forecast próximas {lt+1} sem ({lt} sem lead time + 1 sem recepción/góndola).</small><br>
-        {''.join(f'<small style="color:#8892a8;">{'&nbsp;' * 4}sem {i+1} ({d}): {v:,.1f} u</small><br>' for i, (d, v) in enumerate(row.get('fc_lt_detail', [])))}
-        <small style="color:#8892a8;">{'&nbsp;' * 4}<b>Total demanda durante LT: {fc_lt:,.1f} u</b></small><br><br>
+        {"".join("<small style='color:#8892a8;'>&nbsp;&nbsp;&nbsp;&nbsp;sem " + str(i+1) + " (" + d + "): " + f"{v:,.1f}" + " u</small><br>" for i, (d, v) in enumerate(row.get("fc_lt_detail", [])))}
+        <small style="color:#8892a8;">&nbsp;&nbsp;&nbsp;&nbsp;<b>Total demanda durante LT: {fc_lt:,.1f} u</b></small><br><br>
 
         <b>⑥ Posición de inventario</b><br>
         <code>Pos.Inv. = stock disp. + stock tránsito = {row['stock_disp']:,} + {row['stock_trans']:,} = <b>{pos:,} u</b></code><br>
