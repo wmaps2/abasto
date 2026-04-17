@@ -606,7 +606,7 @@ def build_forecast_table(fc: pd.DataFrame) -> pd.DataFrame:
     return tbl.reset_index(drop=True)
 
 
-def _build_sandbox_chart(hist: pd.DataFrame, fc: pd.DataFrame) -> go.Figure:
+def _build_sandbox_chart(hist: pd.DataFrame, fc: pd.DataFrame, model_name: str = "AutoETS") -> go.Figure:
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=hist["fecha"], y=hist["cantidad"],
@@ -624,7 +624,7 @@ def _build_sandbox_chart(hist: pd.DataFrame, fc: pd.DataFrame) -> go.Figure:
                  "IC 70 %", "rgba(79,143,247,0.18)")
     fig.add_trace(go.Scatter(
         x=fc["ds"], y=fc["AutoETS"],
-        name="Forecast (AutoETS)", mode="lines",
+        name=f"Forecast ({model_name})", mode="lines",
         line=dict(color=C["blue"], width=2, dash="dash"),
         hovertemplate="%{x|%Y-%m-%d}  <b>%{y:.1f}</b><extra>Forecast</extra>",
     ))
@@ -1367,7 +1367,7 @@ with tab_sandbox:
                              delta="Ingresa ≥16 semanas para ver métricas", delta_cls="neu"),
                     )
 
-                fig_sb = _build_sandbox_chart(hist_sb, fc_sb)
+                fig_sb = _build_sandbox_chart(hist_sb, fc_sb, minfo_sb.name if minfo_sb else "AutoETS")
                 st.plotly_chart(fig_sb, use_container_width=True,
                                 config={"displayModeBar": False})
 
