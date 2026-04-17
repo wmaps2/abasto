@@ -671,7 +671,7 @@ with st.sidebar:
     st.html(f"""
     <div style="padding:8px 0 20px 0;">
         <div style="font-size:18px;font-weight:900;letter-spacing:0.1em;color:{C['text_1']};">
-            ◈ DEMANDIQ
+            ◈ ABASTO
         </div>
         <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;
                     color:{C['text_2']};margin-top:3px;">
@@ -787,7 +787,7 @@ st.html(f"""
 <div class="sc-header">
     <div class="sc-brand">
         <span class="sc-icon">◈</span>
-        <span class="sc-name">DEMANDIQ</span>
+        <span class="sc-name">ABASTO</span>
         <span class="sc-tagline"> · Supply Chain Intelligence</span>
     </div>
     <div class="sc-badges">
@@ -1391,7 +1391,7 @@ with tab_sandbox:
 st.html(
     f'<div style="border-top:1px solid {C["border"]};margin-top:32px;padding-top:12px;'
     f'font-size:10px;color:{C["text_3"]};font-family:{C["mono"]};letter-spacing:0.06em;">'
-    f'DEMANDIQ · PHASE 1 · AutoETS (statsforecast {__import__("statsforecast").__version__}) · '
+    f'ABASTO · PHASE 1 · AutoETS (statsforecast {__import__("statsforecast").__version__}) · '
     f'Streamlit · {_today}'
     f'</div>'
 )

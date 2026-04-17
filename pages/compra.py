@@ -689,7 +689,7 @@ def main() -> None:
       <div class="sc-brand">
         <div class="sc-icon">◈</div>
         <div>
-          <div class="sc-name">DEMANDIQ</div>
+          <div class="sc-name">ABASTO</div>
           <div class="sc-tagline">COMPRA — PHASE 2 · Revisión periódica semanal</div>
         </div>
       </div>
