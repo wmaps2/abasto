@@ -53,7 +53,7 @@ SKU_CONFIGS: dict[str, dict] = {
 # ventana_mu         → semanas recientes usadas para estimar demanda actual (μ)
 
 STOCK_CONFIGS: dict[str, dict] = {
-    "A": {"semanas_inventario": 4, "semanas_transito": 1, "ruido_relativo": 0.20, "ventana_mu": 12},
-    "B": {"semanas_inventario": 6, "semanas_transito": 2, "ruido_relativo": 0.20, "ventana_mu": 12},
-    "C": {"semanas_inventario": 8, "semanas_transito": 3, "ruido_relativo": 0.20, "ventana_mu": 26},
+    "A": {"semanas_inventario": 2.5, "semanas_transito": 1, "ruido_relativo": 0.20, "ventana_mu": 12},
+    "B": {"semanas_inventario": 3,   "semanas_transito": 2, "ruido_relativo": 0.20, "ventana_mu": 12},
+    "C": {"semanas_inventario": 3,   "semanas_transito": 2, "ruido_relativo": 0.20, "ventana_mu": 26},
 }
