@@ -329,14 +329,12 @@ _DATA_DIR = Path(__file__).parent.parent / "data"
 
 @st.cache_data(show_spinner=False)
 def _load_productos() -> pd.DataFrame:
-    return pd.read_csv(_DATA_DIR / "productos.csv")
+    return data_module.get_productos()
 
 
 @st.cache_data(show_spinner=False)
 def _load_stock() -> pd.DataFrame:
-    df = pd.read_csv(_DATA_DIR / "stock_actual.csv")
-    df["fecha_llegada_transito"] = pd.to_datetime(df["fecha_llegada_transito"])
-    return df
+    return data_module.get_inventario()
 
 
 def _get_override_hash() -> str:
@@ -354,7 +352,7 @@ def _load_forecast(override_hash: str = "") -> dict | None:
     El parámetro override_hash hace que st.cache_data invalide la entrada
     cuando cambia overrides.json.
     """
-    df_sim = data_module.generate_simulated_data()
+    df_sim = data_module.get_historia_semanal()
     try:
         results, _ = fc_module.get_or_compute(df_sim)
     except Exception:
