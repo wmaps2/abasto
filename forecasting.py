@@ -571,6 +571,7 @@ def run_sandbox_forecast(
     sf_df = (valid[["fecha", "cantidad"]]
              .rename(columns={"fecha": "ds", "cantidad": "y"})
              .assign(unique_id="SANDBOX"))
+    sf_df["y"] = sf_df["y"].astype(float)
 
     try:
         with warnings.catch_warnings():
@@ -590,6 +591,23 @@ def run_sandbox_forecast(
 
     fc = _normalize_columns(fc, minfo)
     fc[f"{PRIMARY}-std"] = _implied_std(fc, PRIMARY)
+
+    # Con n=4 statsforecast no puede estimar varianza → CIs NaN.
+    # Re-corremos añadiendo la mediana como punto sintético para obtener CIs.
+    if fc[f"{PRIMARY}-lo-95"].isna().all():
+        _synthetic = pd.DataFrame([{
+            "ds":        sf_df["ds"].min() - pd.Timedelta(weeks=1),
+            "y":         float(sf_df["y"].median()),
+            "unique_id": "SANDBOX",
+        }])
+        sf_df_padded = pd.concat([_synthetic, sf_df], ignore_index=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            fc = StatsForecast(
+                models=[minfo.primary], freq="W-MON", n_jobs=1,
+            ).forecast(df=sf_df_padded, h=HORIZON, level=LEVELS).reset_index()
+        fc = _normalize_columns(fc, minfo)
+        fc[f"{PRIMARY}-std"] = _implied_std(fc, PRIMARY)
 
     mape, bias = None, None
     if n >= 16:

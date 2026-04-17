@@ -617,13 +617,13 @@ def _build_sandbox_chart(hist: pd.DataFrame, fc: pd.DataFrame, model_name: str =
     ))
     ds = list(fc["ds"])
     if "AutoETS-lo-95" in fc.columns:
-        _ci_band(fig, ds, list(fc["AutoETS-lo-95"]), list(fc["AutoETS-hi-95"]),
+        _ci_band(fig, ds, list(fc["AutoETS-lo-95"].clip(lower=0)), list(fc["AutoETS-hi-95"]),
                  "IC 95 %", "rgba(79,143,247,0.07)")
     if "AutoETS-lo-70" in fc.columns:
-        _ci_band(fig, ds, list(fc["AutoETS-lo-70"]), list(fc["AutoETS-hi-70"]),
+        _ci_band(fig, ds, list(fc["AutoETS-lo-70"].clip(lower=0)), list(fc["AutoETS-hi-70"]),
                  "IC 70 %", "rgba(79,143,247,0.18)")
     fig.add_trace(go.Scatter(
-        x=fc["ds"], y=fc["AutoETS"],
+        x=fc["ds"], y=fc["AutoETS"].clip(lower=0),
         name=f"Forecast ({model_name})", mode="lines",
         line=dict(color=C["blue"], width=2, dash="dash"),
         hovertemplate="%{x|%Y-%m-%d}  <b>%{y:.1f}</b><extra>Forecast</extra>",
