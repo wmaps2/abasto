@@ -16,7 +16,13 @@ from __future__ import annotations
 import hashlib
 import os
 import pickle
+import time
 from datetime import timedelta
+
+os.environ["NIXTLA_ID_AS_COL"] = "1"
+
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="statsforecast")
 
 import numpy as np
 import pandas as pd
@@ -25,8 +31,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from statsforecast import StatsForecast
-import warnings
-
 from statsforecast.models import (
     AutoETS, SeasonalNaive, Holt, Naive, DynamicOptimizedTheta,
 )
@@ -244,13 +248,25 @@ def get_or_compute(df: pd.DataFrame, force: bool = False) -> tuple[dict, bool]:
             f"(mínimo 4 requeridas)."
         )
 
+    t0 = time.time()
+    n_skus = int(sf_df["unique_id"].nunique())
+    print(f"[forecast] INICIO cálculo — {n_skus} SKUs · modelo mínimo: {select_model(n_min).name}", flush=True)
+
     # Modelo global basado en la longitud mínima de las series
     minfo      = select_model(n_min)
+
+    t1 = time.time()
     forecasts  = run_forecast(df, minfo)
     cv, cv_skipped = run_cross_validation(df, minfo, counts=counts)
     metrics    = compute_metrics(cv) if not cv.empty else {}
-    fc_hist    = generate_forecast_history(df, minfo)
     ets_params = get_ets_model_params(df, minfo)
+    print(f"[forecast] Forecast actual   {time.time() - t1:.1f}s", flush=True)
+
+    t2 = time.time()
+    fc_hist    = generate_forecast_history(df, minfo)
+    print(f"[forecast] Historial retro   {time.time() - t2:.1f}s", flush=True)
+
+    print(f"[forecast] TOTAL             {time.time() - t0:.1f}s", flush=True)
 
     results = dict(
         forecasts   = forecasts,
