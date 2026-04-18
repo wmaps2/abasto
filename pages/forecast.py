@@ -470,11 +470,18 @@ def build_forecast_chart(
     ))
 
     ds = list(fc["ds"])
+    _ic_truncated = False
     if "AutoETS-lo-95" in fc.columns:
-        _ci_band(fig, ds, list(fc["AutoETS-lo-95"]), list(fc["AutoETS-hi-95"]),
+        _raw_lo95 = list(fc["AutoETS-lo-95"])
+        if any(v < 0 for v in _raw_lo95):
+            _ic_truncated = True
+        _ci_band(fig, ds, [max(0.0, v) for v in _raw_lo95], list(fc["AutoETS-hi-95"]),
                  "IC 95 %", "rgba(79,143,247,0.07)")
     if "AutoETS-lo-70" in fc.columns:
-        _ci_band(fig, ds, list(fc["AutoETS-lo-70"]), list(fc["AutoETS-hi-70"]),
+        _raw_lo70 = list(fc["AutoETS-lo-70"])
+        if any(v < 0 for v in _raw_lo70):
+            _ic_truncated = True
+        _ci_band(fig, ds, [max(0.0, v) for v in _raw_lo70], list(fc["AutoETS-hi-70"]),
                  "IC 70 %", "rgba(79,143,247,0.18)")
 
     # Forecast original del modelo (siempre azul punteado cuando hay override activo)
@@ -514,12 +521,21 @@ def build_forecast_chart(
     x_start = (hist["fecha"].max() - pd.Timedelta(weeks=12)).strftime("%Y-%m-%d")
     x_end   = fc["ds"].max().strftime("%Y-%m-%d")
 
-    return _dark_layout(
+    fig = _dark_layout(
         fig,
         title=f"<b style='color:{C['text_1']}'>{label}</b>"
               f"<span style='color:{C['text_3']};font-size:12px'> · Histórico + Forecast 12 semanas</span>",
         x_range=[x_start, x_end],
     )
+    if _ic_truncated:
+        fig.add_annotation(
+            text="⚠ IC inferior truncado a 0 por alta variabilidad",
+            xref="paper", yref="paper",
+            x=0.01, y=0.02, showarrow=False,
+            font=dict(color=C["yellow"], size=10, family="Courier New,monospace"),
+            xanchor="left", yanchor="bottom",
+        )
+    return fig
 
 
 def build_forecast_history_chart(
@@ -536,11 +552,18 @@ def build_forecast_history_chart(
     ))
 
     ds = list(fc["ds"])
+    _ic_truncated_h = False
     if "AutoETS-lo-95" in fc.columns:
-        _ci_band(fig, ds, list(fc["AutoETS-lo-95"]), list(fc["AutoETS-hi-95"]),
+        _raw_lo95_h = list(fc["AutoETS-lo-95"])
+        if any(v < 0 for v in _raw_lo95_h):
+            _ic_truncated_h = True
+        _ci_band(fig, ds, [max(0.0, v) for v in _raw_lo95_h], list(fc["AutoETS-hi-95"]),
                  "IC 95 %", "rgba(79,143,247,0.07)")
     if "AutoETS-lo-70" in fc.columns:
-        _ci_band(fig, ds, list(fc["AutoETS-lo-70"]), list(fc["AutoETS-hi-70"]),
+        _raw_lo70_h = list(fc["AutoETS-lo-70"])
+        if any(v < 0 for v in _raw_lo70_h):
+            _ic_truncated_h = True
+        _ci_band(fig, ds, [max(0.0, v) for v in _raw_lo70_h], list(fc["AutoETS-hi-70"]),
                  "IC 70 %", "rgba(79,143,247,0.18)")
 
     fig.add_trace(go.Scatter(
@@ -583,26 +606,44 @@ def build_forecast_history_chart(
     x_start = (pd.Timestamp(run_date) - pd.Timedelta(weeks=8)).strftime("%Y-%m-%d")
     x_end   = fc["ds"].max().strftime("%Y-%m-%d")
 
-    return _dark_layout(
+    fig = _dark_layout(
         fig,
         title=f"<b style='color:{C['text_1']}'>{label}</b>"
               f"<span style='color:{C['text_3']};font-size:12px'> · Forecast del {run_str}</span>",
         x_range=[x_start, x_end],
     )
+    if _ic_truncated_h:
+        fig.add_annotation(
+            text="⚠ IC inferior truncado a 0 por alta variabilidad",
+            xref="paper", yref="paper",
+            x=0.01, y=0.02, showarrow=False,
+            font=dict(color=C["yellow"], size=10, family="Courier New,monospace"),
+            xanchor="left", yanchor="bottom",
+        )
+    return fig
 
 
-def build_forecast_table(fc: pd.DataFrame) -> pd.DataFrame:
+def build_forecast_table(fc: pd.DataFrame, override_mask: list | None = None) -> pd.DataFrame:
     cols, renames = ["ds", "AutoETS"], {"ds": "SEMANA", "AutoETS": "MEDIA"}
+    ic_col_names: list[str] = []
     if "AutoETS-std" in fc.columns:
         cols.append("AutoETS-std"); renames["AutoETS-std"] = "STD"
+        ic_col_names.append("STD")
     for band in ["70", "95"]:
         lo, hi = f"AutoETS-lo-{band}", f"AutoETS-hi-{band}"
         if lo in fc.columns:
             cols += [lo, hi]; renames[lo] = f"IC{band}% LO"; renames[hi] = f"IC{band}% HI"
+            ic_col_names += [f"IC{band}% LO", f"IC{band}% HI"]
     tbl = fc[cols].rename(columns=renames).copy()
     tbl["SEMANA"] = tbl["SEMANA"].dt.strftime("%Y-%m-%d")
     num = [c for c in tbl.columns if c != "SEMANA"]
     tbl[num] = tbl[num].round(1)
+    if override_mask is not None and ic_col_names:
+        for i, has_ovr in enumerate(override_mask):
+            if has_ovr:
+                for col in ic_col_names:
+                    if col in tbl.columns:
+                        tbl.at[i, col] = float("nan")
     return tbl.reset_index(drop=True)
 
 
@@ -935,8 +976,13 @@ with tab_fc:
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
         with st.expander("FORECAST TABLE"):
-            tbl = build_forecast_table(_fc_for_kpi)
+            _ovr_mask = None
+            if _has_ovr:
+                _ovr_mask = [pd.Timestamp(d).normalize() in _ovr_map for d in _fc_for_kpi["ds"]]
+            tbl = build_forecast_table(_fc_for_kpi, override_mask=_ovr_mask)
             st.dataframe(tbl, use_container_width=True, hide_index=True)
+            if _has_ovr:
+                st.caption("— IC no aplica para semanas con valor fijado manualmente")
 
         # ── Override manual (By SKU only) ─────────────────────────────────────
         if vista == "By SKU":
@@ -986,17 +1032,32 @@ with tab_fc:
                     ):
                         _save_rows = fc_view[["ds"]].copy().reset_index(drop=True)
                         _save_rows["override"] = _edited["override"].values
+                        _n_mod = int(_edited["override"].notna().sum())
                         overrides_module.set_sku(selected_sku, _save_rows)
+                        st.toast(f"✓ Override aplicado a {selected_sku} ({_n_mod} semanas modificadas)", icon="✅")
                         st.rerun()
                 with _c2:
-                    if st.button(
+                    _clear_clicked = st.button(
                         "✕  LIMPIAR OVERRIDE",
                         key=f"clear_ovr_{selected_sku}",
                         disabled=not _has_ovr,
                         use_container_width=True,
-                    ):
-                        overrides_module.clear_sku(selected_sku)
-                        st.rerun()
+                    )
+                    if _clear_clicked:
+                        st.session_state[f"confirm_clear_{selected_sku}"] = True
+
+                if st.session_state.get(f"confirm_clear_{selected_sku}"):
+                    st.warning(f"¿Eliminar override de {selected_sku}? Esta acción no se puede deshacer.")
+                    _cc1, _cc2 = st.columns(2)
+                    with _cc1:
+                        if st.button("Sí, eliminar", key=f"confirm_yes_{selected_sku}", use_container_width=True):
+                            overrides_module.clear_sku(selected_sku)
+                            st.session_state.pop(f"confirm_clear_{selected_sku}", None)
+                            st.rerun()
+                    with _cc2:
+                        if st.button("Cancelar", key=f"confirm_no_{selected_sku}", use_container_width=True):
+                            st.session_state.pop(f"confirm_clear_{selected_sku}", None)
+                            st.rerun()
 
 
 # ══ Tab 2: Accuracy ═══════════════════════════════════════════════════════════

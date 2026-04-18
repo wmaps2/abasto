@@ -750,13 +750,15 @@ def main() -> None:
         """)
 
         st.markdown("---")
-        st.download_button(
+        _csv_fname = f"compra_{pd.Timestamp.today().strftime('%Y%m%d')}.csv"
+        if st.download_button(
             label="↓  EXPORTAR CSV COMPLETO",
             data=csv_bytes,
-            file_name=f"compra_{pd.Timestamp.today().strftime('%Y%m%d')}.csv",
+            file_name=_csv_fname,
             mime="text/csv",
             use_container_width=True,
-        )
+        ):
+            st.toast(f"✓ CSV exportado: {_csv_fname} ({len(rep)} SKUs)", icon="✅")
         st.markdown("---")
         st.html(f"""
         <div style="font-size:10px;color:{C['text_3']};line-height:1.7;">
@@ -771,6 +773,10 @@ def main() -> None:
 
     if "rep_computed" not in st.session_state or run_orders:
         st.session_state["rep_computed"] = True
+        if run_orders:
+            n_orders = int((rep["order_qty"] > 0).sum())
+            total_cost = float(rep[rep["order_qty"] > 0]["order_cost"].sum())
+            st.toast(f"✓ {n_orders} órdenes generadas por ${total_cost:,.0f}", icon="✅")
 
     # ── Global KPIs ───────────────────────────────────────────────────────────
     total_order_cost = rep[rep["order_qty"] > 0]["order_cost"].sum()
