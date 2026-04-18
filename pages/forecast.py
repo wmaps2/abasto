@@ -508,7 +508,7 @@ def build_forecast_chart(
 
     if "SeasonalNaive" in fc.columns:
         fig.add_trace(go.Scatter(
-            x=fc["ds"], y=fc["SeasonalNaive"],
+            x=fc["ds"], y=fc["SeasonalNaive"].clip(lower=0),
             name="Naive estacional", mode="lines",
             line=dict(color=C["text_3"], width=1, dash="dot"),
             visible="legendonly",
@@ -527,6 +527,7 @@ def build_forecast_chart(
               f"<span style='color:{C['text_3']};font-size:12px'> · Histórico + Forecast 12 semanas</span>",
         x_range=[x_start, x_end],
     )
+    fig.update_yaxes(rangemode="nonnegative")
     if _ic_truncated:
         fig.add_annotation(
             text="⚠ IC inferior truncado a 0 por alta variabilidad",
@@ -612,6 +613,7 @@ def build_forecast_history_chart(
               f"<span style='color:{C['text_3']};font-size:12px'> · Forecast del {run_str}</span>",
         x_range=[x_start, x_end],
     )
+    fig.update_yaxes(rangemode="nonnegative")
     if _ic_truncated_h:
         fig.add_annotation(
             text="⚠ IC inferior truncado a 0 por alta variabilidad",
