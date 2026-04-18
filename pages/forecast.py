@@ -487,7 +487,7 @@ def build_forecast_chart(
     # Forecast original del modelo (siempre azul punteado cuando hay override activo)
     original_name = "Forecast modelo (original)" if fc_override is not None else "Forecast (AutoETS)"
     fig.add_trace(go.Scatter(
-        x=fc["ds"], y=fc["AutoETS"],
+        x=fc["ds"], y=fc["AutoETS"].clip(lower=0),
         name=original_name, mode="lines",
         line=dict(color=C["blue"], width=2, dash="dash"),
         hovertemplate="%{x|%Y-%m-%d}  <b>%{y:.1f}</b><extra>Forecast modelo</extra>",
@@ -568,7 +568,7 @@ def build_forecast_history_chart(
                  "IC 70 %", "rgba(79,143,247,0.18)")
 
     fig.add_trace(go.Scatter(
-        x=fc["ds"], y=fc["AutoETS"],
+        x=fc["ds"], y=fc["AutoETS"].clip(lower=0),
         name="Forecast", mode="lines",
         line=dict(color=C["blue"], width=2, dash="dash"),
         hovertemplate="%{x|%Y-%m-%d}  <b>%{y:.1f}</b><extra>Forecast</extra>",
