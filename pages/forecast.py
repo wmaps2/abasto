@@ -1106,19 +1106,22 @@ with tab_fc:
 with tab_perf:
 
     # ── Controls ─────────────────────────────────────────────────────────────
-    _p_c1, _p_c2, _p_c3 = st.columns([1, 1, 2])
-    with _p_c1:
+    # ── Row 1: View radio + conditional SKU/Category dropdown ────────────────
+    _r1_view, _r1_filter, _r1_pad = st.columns([3, 2, 2])
+    with _r1_view:
         _pv = st.radio(
             "View", ["All", "By SKU", "By Category"],
-            horizontal=False, key="perf_view",
+            horizontal=True, key="perf_view",
         )
-    with _p_c2:
+    with _r1_filter:
         if _pv == "By SKU":
+            st.html('<div style="height:28px"></div>')
             _pv_sku = st.selectbox(
                 "SKU", sorted(df["sku"].unique()),
                 key="perf_sku", label_visibility="collapsed",
             )
         elif _pv == "By Category":
+            st.html('<div style="height:28px"></div>')
             _pv_cat = st.selectbox(
                 "Category",
                 sorted({_get_category(s) for s in df["sku"].unique()}),
@@ -1133,10 +1136,12 @@ with tab_perf:
         _p_local_dates = sorted(
             {str(d)[:10] for d in fc_hist["run_date"].unique()}, reverse=True
         )
-    _p_sb_set  = set(_p_sb_dates)
+    _p_sb_set    = set(_p_sb_dates)
     _p_all_dates = _p_sb_dates + [d for d in _p_local_dates if d not in _p_sb_set]
 
-    with _p_c3:
+    # ── Row 2: Forecast run date dropdown ─────────────────────────────────────
+    _r2_date, _r2_pad = st.columns([3, 4])
+    with _r2_date:
         if not _p_all_dates:
             st.html(
                 '<div class="warn-box">No hay historial de forecasts. '
