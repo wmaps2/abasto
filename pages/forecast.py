@@ -709,6 +709,51 @@ def _aggregate_by_category(
     return hist_agg, fc_agg
 
 
+@st.cache_data(ttl=300)
+def _load_sb_dates_for_sku(sku: str) -> list[str]:
+    """Return all forecast run dates (YYYY-MM-DD) for a SKU from Supabase, newest first."""
+    try:
+        sb = fc_module._sb_client()
+        rows = (sb.table("forecasts")
+                  .select("fecha_calculo")
+                  .eq("sku_id", sku)
+                  .execute().data)
+        return sorted({r["fecha_calculo"][:10] for r in rows}, reverse=True)
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=300)
+def _load_fc_for_date(date_str: str, sku: str) -> pd.DataFrame:
+    """Load forecast rows for one SKU and one run-date from Supabase."""
+    try:
+        sb = fc_module._sb_client()
+        rows = (sb.table("forecasts")
+                  .select("*")
+                  .gte("fecha_calculo", date_str + "T00:00:00")
+                  .lte("fecha_calculo", date_str + "T23:59:59")
+                  .eq("sku_id", sku)
+                  .execute().data)
+        if not rows:
+            return pd.DataFrame()
+        fc = pd.DataFrame(rows)
+        fc["ds"] = pd.to_datetime(fc["fecha_target"])
+        fc = fc.rename(columns={
+            "sku_id":      "unique_id",
+            "valor":       "AutoETS",
+            "ic_70_lower": "AutoETS-lo-70",
+            "ic_70_upper": "AutoETS-hi-70",
+            "ic_95_lower": "AutoETS-lo-95",
+            "ic_95_upper": "AutoETS-hi-95",
+        })
+        keep = ["unique_id", "ds", "AutoETS",
+                "AutoETS-lo-70", "AutoETS-hi-70",
+                "AutoETS-lo-95", "AutoETS-hi-95"]
+        return fc[[c for c in keep if c in fc.columns]].sort_values("ds").reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
+
+
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.html(f"""
@@ -885,10 +930,9 @@ cv_skipped = results.get("cv_skipped", [])
 
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
-tab_fc, tab_acc, tab_hist, tab_sandbox = st.tabs([
+tab_fc, tab_perf, tab_sandbox = st.tabs([
     "Forecast",
-    "Accuracy",
-    "Forecast History",
+    "Model Performance",
     "Sandbox",
 ])
 
@@ -1062,8 +1106,12 @@ with tab_fc:
                             st.rerun()
 
 
-# ══ Tab 2: Accuracy ═══════════════════════════════════════════════════════════
-with tab_acc:
+# ══ Tab 2: Model Performance ══════════════════════════════════════════════════
+with tab_perf:
+
+    # ── A: Cross-Validation Accuracy ─────────────────────────────────────────
+    section("Accuracy — Validación cruzada")
+
     if results.get("from_supabase") and not metrics:
         st.html(
             f'<div class="info-box">Forecast cargado de Supabase. '
@@ -1084,7 +1132,7 @@ with tab_acc:
                 "Horizonte de evaluación",
                 list(_H_OPTIONS.keys()),
                 index=3,
-                key="acc_horizon",
+                key="perf_horizon",
             )
         _h_max = _H_OPTIONS[_h_label]
 
@@ -1247,103 +1295,115 @@ with tab_acc:
             f'</div>'
         )
 
+    st.markdown("---")
 
-# ══ Tab 3: Forecast History ═══════════════════════════════════════════════════
-with tab_hist:
-    section("Forecast History — last 8 weeks")
+    # ── B: Forecast History ───────────────────────────────────────────────────
+    section("Forecast History")
     st.html(
         f'<div style="font-size:11px;color:{C["text_3"]};margin:-10px 0 20px 0;">'
         f'Each run covers a 12-week horizon. Green/red dots show whether actual demand '
         f'fell inside or outside the 70% CI.</div>'
     )
 
-    if results.get("from_supabase") and fc_hist.empty:
+    _ph_col, _ = st.columns([1, 3])
+    with _ph_col:
+        sel_h_perf = st.selectbox(
+            "SKU", sorted(df["sku"].unique()),
+            key="perf_hist_sku", label_visibility="collapsed",
+        )
+
+    # Prefer Supabase dates (all backfilled runs); fall back to local fc_hist
+    _sb_run_dates = _load_sb_dates_for_sku(sel_h_perf)
+
+    _local_run_dates: list[str] = []
+    if not fc_hist.empty and "run_date" in fc_hist.columns:
+        _lfc = fc_hist[fc_hist["unique_id"] == sel_h_perf]
+        _local_run_dates = sorted(
+            {str(d)[:10] for d in _lfc["run_date"].unique()}, reverse=True
+        )
+
+    # Merge: Supabase first, then any local dates not already there
+    _sb_set = set(_sb_run_dates)
+    _all_run_dates = _sb_run_dates + [d for d in _local_run_dates if d not in _sb_set]
+
+    if not _all_run_dates:
         st.html(
-            f'<div class="info-box">Forecast cargado de Supabase. '
-            f'Haz click en <strong>↺ Forzar recálculo</strong> para ver el historial de forecasts.</div>'
+            f'<div class="info-box">No hay historial de forecasts para este SKU. '
+            f'Ejecuta el backfill o haz click en <strong>↺ Forzar recálculo</strong>.</div>'
         )
-    elif fc_hist.empty:
-        st.html('<div class="warn-box">Cannot generate history — insufficient data.</div>')
     else:
-        col_a2, col_b2 = st.columns([1, 3])
-        with col_a2:
-            vista_h = st.radio("View", ["By SKU", "By Category"],
-                               horizontal=False, key="vista_hist")
-        with col_b2:
-            if vista_h == "By SKU":
-                sel_h = st.selectbox("SKU", sorted(df["sku"].unique()),
-                                     key="hist_sku_sel", label_visibility="collapsed")
-                fc_hist_view = fc_hist[fc_hist["unique_id"] == sel_h].copy()
-                hist_view_h  = df[df["sku"] == sel_h].sort_values("fecha")
-                label_h = sel_h
-            else:
-                cats_h = sorted({_get_category(s) for s in df["sku"].unique()})
-                sel_cat_h = st.selectbox(
-                    "Category", cats_h,
-                    format_func=lambda c: f"Category {c}",
-                    key="hist_cat_sel", label_visibility="collapsed",
-                )
-                cat_skus_h = [s for s in df["sku"].unique() if _get_category(s) == sel_cat_h]
-                num_cols_h = [c for c in fc_hist.columns
-                              if c not in ("unique_id", "ds", "run_date", "index")]
-                fc_hist_view = (fc_hist[fc_hist["unique_id"].isin(cat_skus_h)]
-                                .groupby(["run_date", "ds"], as_index=False)[num_cols_h].sum())
-                hist_view_h, _ = _aggregate_by_category(df, forecasts, sel_cat_h)
-                label_h = f"Category {sel_cat_h}"
-
-        run_dates = sorted(fc_hist_view["run_date"].unique(), reverse=True)
-        sel_run   = st.selectbox(
-            "Forecast run date",
-            run_dates,
-            format_func=lambda d: pd.Timestamp(d).strftime("%Y-%m-%d"),
-            key="hist_run_date",
+        sel_run_perf = st.selectbox(
+            "Fecha del forecast",
+            _all_run_dates,
+            format_func=lambda d: str(d)[:10],
+            key="perf_run_date",
         )
-        fc_sel = fc_hist_view[fc_hist_view["run_date"] == sel_run].copy()
 
-        last_hist_date = hist_view_h["fecha"].max()
-        overlap = fc_sel[fc_sel["ds"] <= last_hist_date].merge(
-            hist_view_h.rename(columns={"fecha": "ds"})[["ds", "cantidad"]],
-            on="ds", how="inner",
-        )
-        overlap = overlap[overlap["cantidad"] > 0]
+        hist_view_h = df[df["sku"] == sel_h_perf].sort_values("fecha")
 
-        if overlap.empty:
+        if sel_run_perf in _sb_set:
+            fc_sel = _load_fc_for_date(sel_run_perf, sel_h_perf)
+        else:
+            _lrd = pd.Timestamp(sel_run_perf)
+            fc_sel = fc_hist[
+                (fc_hist["unique_id"] == sel_h_perf) &
+                (pd.to_datetime(fc_hist["run_date"]).dt.normalize() == _lrd)
+            ].copy()
+
+        if fc_sel.empty:
             st.html(
-                '<div class="info-box">This is the most recent forecast — '
-                'no actual demand available yet for comparison.</div>'
+                '<div class="info-box">No hay datos de forecast para esta fecha/SKU.</div>'
             )
         else:
-            overlap["ape"] = np.abs(overlap["cantidad"] - overlap["AutoETS"]) / overlap["cantidad"]
-            overlap["pe"]  = (overlap["AutoETS"] - overlap["cantidad"]) / overlap["cantidad"]
-            n_in = 0
-            if "AutoETS-lo-70" in overlap.columns:
-                n_in = ((overlap["cantidad"] >= overlap["AutoETS-lo-70"]) &
-                        (overlap["cantidad"] <= overlap["AutoETS-hi-70"])).sum()
+            last_hist_date = hist_view_h["fecha"].max()
+            overlap = fc_sel[fc_sel["ds"] <= last_hist_date].merge(
+                hist_view_h.rename(columns={"fecha": "ds"})[["ds", "cantidad"]],
+                on="ds", how="inner",
+            )
+            overlap = overlap[overlap["cantidad"] > 0]
 
-            mape_v = overlap["ape"].mean() * 100
-            bias_v = overlap["pe"].mean() * 100
-            kpi_row(
-                dict(label="Weeks with actuals",    value=str(len(overlap))),
-                dict(label="MAPE (realized weeks)", value=f"{mape_v:.1f}%",
-                     delta_cls="good" if mape_v < 15 else ("warn" if mape_v < 25 else "neg")),
-                dict(label="Bias (realized weeks)", value=f"{bias_v:+.1f}%",
-                     delta="+ overestimate · – underestimate", delta_cls="neu"),
-                dict(label="Inside IC 70%",         value=f"{n_in} / {len(overlap)}",
-                     delta_cls="pos" if n_in == len(overlap) else "neu"),
+            if overlap.empty:
+                st.html(
+                    '<div class="info-box">This is the most recent forecast — '
+                    'no actual demand available yet for comparison.</div>'
+                )
+            else:
+                overlap["ape"] = np.abs(overlap["cantidad"] - overlap["AutoETS"]) / overlap["cantidad"]
+                overlap["pe"]  = (overlap["AutoETS"] - overlap["cantidad"]) / overlap["cantidad"]
+                n_in = 0
+                if "AutoETS-lo-70" in overlap.columns:
+                    n_in = int(
+                        ((overlap["cantidad"] >= overlap["AutoETS-lo-70"]) &
+                         (overlap["cantidad"] <= overlap["AutoETS-hi-70"])).sum()
+                    )
+                mape_v = overlap["ape"].mean() * 100
+                bias_v = overlap["pe"].mean() * 100
+                kpi_row(
+                    dict(label="Weeks with actuals",    value=str(len(overlap))),
+                    dict(label="MAPE (realized weeks)", value=f"{mape_v:.1f}%",
+                         delta_cls="pos" if mape_v < 15 else ("neu" if mape_v < 25 else "neg")),
+                    dict(label="Bias (realized weeks)", value=f"{bias_v:+.1f}%",
+                         delta="+ overestimate · – underestimate", delta_cls="neu"),
+                    dict(label="Inside IC 70%",         value=f"{n_in} / {len(overlap)}",
+                         delta_cls="pos" if n_in == len(overlap) else "neu"),
+                )
+
+            fig_h = build_forecast_history_chart(
+                hist_view_h, fc_sel, sel_h_perf, sel_run_perf
+            )
+            st.plotly_chart(fig_h, use_container_width=True, config={"displayModeBar": False})
+
+            _src_label = "Supabase" if sel_run_perf in _sb_set else "local backtest"
+            st.html(
+                f'<div style="font-size:10px;color:{C["text_3"]};font-family:{C["mono"]};">'
+                f'● GREEN = actual within IC 70% &nbsp;·&nbsp; '
+                f'● RED = actual outside IC 70% &nbsp;·&nbsp; '
+                f'Blue dashed line = model run date &nbsp;·&nbsp; '
+                f'source: {_src_label} ({len(_all_run_dates)} runs available)</div>'
             )
 
-        fig_h = build_forecast_history_chart(hist_view_h, fc_sel, label_h, sel_run)
-        st.plotly_chart(fig_h, use_container_width=True, config={"displayModeBar": False})
 
-        st.html(
-            f'<div style="font-size:10px;color:{C["text_3"]};font-family:{C["mono"]};">'
-            f'● GREEN = actual within IC 70% &nbsp;·&nbsp; '
-            f'● RED = actual outside IC 70% &nbsp;·&nbsp; '
-            f'Blue dashed line = model run date</div>'
-        )
-
-
-# ══ Tab 4: Sandbox ════════════════════════════════════════════════════════════
+# ══ Tab 3: Sandbox ════════════════════════════════════════════════════════════
 with tab_sandbox:
     section("Live Demo Sandbox")
     st.html(
