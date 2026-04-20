@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import data as data_module
 import forecasting as fc_module
 import overrides as overrides_module
-import upload as upload_module
 
 # ─── Design tokens ────────────────────────────────────────────────────────────
 C = dict(
@@ -736,256 +735,12 @@ def _load_fc_run(date_str: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def _load_sb_historia(fuentes: tuple[str, ...]) -> pd.DataFrame:
-    return data_module.get_historia_semanal(fuentes=list(fuentes))
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def _count_uploaded() -> int:
-    return upload_module.get_uploaded_count()
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def _get_template_bytes() -> bytes:
-    return upload_module.build_template_xlsx()
-
-
-# ─── Sidebar ──────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.html(f"""
-    <div style="padding:8px 0 20px 0;">
-        <div style="font-size:18px;font-weight:900;letter-spacing:0.1em;color:{C['text_1']};">
-            ◈ ABASTO
-        </div>
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;
-                    color:{C['text_2']};margin-top:3px;">
-            Supply Chain Intelligence
-        </div>
-    </div>
-    """)
-
-    # ── DATOS PERSONALIZADOS ──────────────────────────────────────────────────
-    st.html(f'<div class="section-hdr">Datos personalizados</div>')
-
-    _n_up = _count_uploaded()
-    _cv1, _cv2 = st.columns(2)
-    with _cv1:
-        _show_demo = st.checkbox("Demo (12 SKUs)", value=True, key="show_demo")
-    with _cv2:
-        _show_up = st.checkbox(
-            f"Subidos ({_n_up})",
-            value=(_n_up > 0),
-            key="show_uploaded",
-            disabled=(_n_up == 0),
-        )
-
-    # Load df from Supabase
-    _fuentes: list[str] = []
-    if _show_demo:
-        _fuentes.append("demo")
-    if _show_up and _n_up > 0:
-        _fuentes.append("uploaded")
-
-    df: pd.DataFrame | None = None
-    if not _fuentes:
-        st.warning("Selecciona al menos una fuente de datos.")
-    else:
-        try:
-            df = _load_sb_historia(tuple(sorted(_fuentes)))
-            if df.empty:
-                df = None
-                st.html('<div class="warn-box">Sin datos para las fuentes seleccionadas.</div>')
-            else:
-                _info = data_module.summary(df)
-                st.html(
-                    f'<div class="ok-box">✓ {_info["n_skus"]} SKUs · {_info["n_weeks"]} semanas<br>'
-                    f'<span style="font-weight:400;color:{C["text_2"]};font-size:11px;">'
-                    f'{_info["date_min"]} → {_info["date_max"]}</span></div>'
-                )
-        except Exception as _exc:
-            if "42703" in str(_exc) or "does not exist" in str(_exc):
-                st.error(
-                    "Falta migración en Supabase. Ejecuta en SQL Editor:\n\n"
-                    "```sql\n" + upload_module.MIGRATION_SQL + "\n```"
-                )
-            else:
-                st.error(f"Error cargando datos: {_exc}")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Download template
-    try:
-        _tpl = _get_template_bytes()
-        st.download_button(
-            "📥 Download template",
-            data=_tpl,
-            file_name="abasto_template.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
-    except Exception:
-        st.button("📥 Download template (no disponible)", disabled=True, use_container_width=True)
-
-    # Upload CSV
-    _up_file = st.file_uploader(
-        "📤 Upload Excel",
-        type=["xlsx"],
-        label_visibility="visible",
-        key="sidebar_xlsx_uploader",
-    )
-
-    if _up_file is not None:
-        _fid = f"{_up_file.name}_{_up_file.size}"
-        # Reset state when a different file is selected
-        if st.session_state.get("_up_fid") != _fid:
-            st.session_state["_up_fid"] = _fid
-            for _k in ("_up_parsed", "_up_conflicts", "_up_replace_ok"):
-                st.session_state.pop(_k, None)
-
-        # Parse once
-        if "_up_parsed" not in st.session_state:
-            try:
-                _dm, _dd = upload_module.parse_upload(_up_file)
-                st.session_state["_up_parsed"]    = (_dm, _dd)
-                st.session_state["_up_conflicts"] = upload_module.check_conflicts(
-                    _dm["sku_id"].tolist()
-                )
-            except upload_module.UploadError as _e:
-                st.error(str(_e))
-
-        if "_up_parsed" in st.session_state:
-            _dm, _dd         = st.session_state["_up_parsed"]
-            _conflicts       = st.session_state.get("_up_conflicts", [])
-            _n_new           = len(_dm)
-
-            st.html(f'<div class="ok-box">✓ {_n_new} SKU(s) listos</div>')
-
-            if _conflicts and not st.session_state.get("_up_replace_ok"):
-                st.warning(f"Ya existen: {', '.join(_conflicts)}. ¿Reemplazar?")
-                _rc1, _rc2 = st.columns(2)
-                with _rc1:
-                    if st.button("Reemplazar", key="_btn_rep_yes", use_container_width=True):
-                        st.session_state["_up_replace_ok"] = True
-                        st.rerun()
-                with _rc2:
-                    if st.button("Cancelar", key="_btn_rep_no", use_container_width=True):
-                        for _k in ("_up_fid", "_up_parsed", "_up_conflicts", "_up_replace_ok"):
-                            st.session_state.pop(_k, None)
-                        st.rerun()
-            else:
-                _replace = bool(_conflicts) and st.session_state.get("_up_replace_ok", False)
-                if st.button("⬆ Confirmar upload", key="_btn_do_up", use_container_width=True):
-                    with st.spinner(f"Subiendo {_n_new} SKU(s) a Supabase…"):
-                        try:
-                            _done = upload_module.upload_skus(_dm, _dd, replace=_replace)
-                            st.session_state["_just_uploaded"] = _done
-                            for _k in ("_up_fid", "_up_parsed", "_up_conflicts", "_up_replace_ok"):
-                                st.session_state.pop(_k, None)
-                            _load_sb_historia.clear()
-                            _count_uploaded.clear()
-                            _clear_results()
-                            st.rerun()
-                        except upload_module.UploadError as _e:
-                            st.error(str(_e))
-
-    # Post-upload: toast + backfill button
-    if st.session_state.get("_just_uploaded"):
-        _done_ids = st.session_state["_just_uploaded"]
-        st.toast(f"✓ {len(_done_ids)} SKU(s) cargados", icon="✅")
-        st.html(
-            f'<div class="ok-box">✓ {len(_done_ids)} SKU(s) guardados:<br>'
-            f'<span style="font-size:11px;">{", ".join(_done_ids)}</span></div>'
-        )
-        if st.button("📊 Generar forecasts históricos (~2 min)",
-                     key="_btn_backfill", use_container_width=True):
-            with st.spinner("Generando forecasts históricos para todos los SKUs…"):
-                from simulation import backfill_forecasts
-                backfill_forecasts.main(n_weeks=24)
-            st.session_state.pop("_just_uploaded", None)
-            st.rerun()
-        if st.button("Cerrar", key="_btn_close_up", use_container_width=True):
-            st.session_state.pop("_just_uploaded", None)
-            st.rerun()
-
-    # Delete uploaded data
-    if _n_up > 0:
-        st.markdown("---")
-        if st.session_state.get("_confirm_del_up"):
-            st.warning(f"¿Borrar {_n_up} SKU(s) subidos? Irreversible.")
-            _dc1, _dc2 = st.columns(2)
-            with _dc1:
-                if st.button("Sí, borrar", key="_btn_del_yes", use_container_width=True):
-                    with st.spinner("Eliminando…"):
-                        upload_module.delete_uploaded_data()
-                    st.session_state.pop("_confirm_del_up", None)
-                    _load_sb_historia.clear()
-                    _count_uploaded.clear()
-                    _clear_results()
-                    st.rerun()
-            with _dc2:
-                if st.button("Cancelar", key="_btn_del_no", use_container_width=True):
-                    st.session_state.pop("_confirm_del_up", None)
-        else:
-            if st.button("🗑️ Borrar datos de usuario",
-                         key="_btn_del_trig", use_container_width=True):
-                st.session_state["_confirm_del_up"] = True
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    run_btn   = st.button(
-        "▶  Run Forecast",
-        disabled=(df is None),
-        use_container_width=True,
-    )
-    force_btn = st.button(
-        "↺  Forzar recálculo",
-        disabled=(df is None),
-        use_container_width=True,
-        key="force_btn",
-        help="Ignora el caché y recalcula el modelo desde cero.",
-    )
-
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.html(f'<div class="section-hdr">Model</div>')
-
-    _cs = st.session_state.get("cache_status")
-    if _cs:
-        if _cs["from_cache"]:
-            _computed = pd.Timestamp(_cs["computed_at"]).tz_localize("UTC") if pd.Timestamp(_cs["computed_at"]).tzinfo is None else pd.Timestamp(_cs["computed_at"])
-            _age     = pd.Timestamp.now(tz="UTC") - _computed
-            _age_str = f"{_age.days}d" if _age.days > 0 else "hoy"
-            _cache_row = (f'<div class="mc-row">Caché'
-                          f'<span style="color:{C["green"]}">✓ hace {_age_str}</span></div>')
-        else:
-            _dt_str    = _cs["computed_at"].strftime("%Y-%m-%d %H:%M")
-            _cache_row = (f'<div class="mc-row">Caché'
-                          f'<span style="color:{C["blue"]}">recalculado {_dt_str}</span></div>')
-    else:
-        _cache_row = ""
-
-    _minfo = (st.session_state.get("forecast_results") or {}).get("model_info")
-    _algo_name  = _minfo.name   if _minfo else "AutoETS · s=52"
-    _algo_bench = _minfo.benchmark_col if _minfo else "SeasonalNaive"
-
-    st.html(f"""
-    <div class="model-card">
-        <div class="mc-row">Algorithm   <span>{_algo_name}</span></div>
-        <div class="mc-row">Horizon     <span>{fc_module.HORIZON} weeks</span></div>
-        <div class="mc-row">IC levels   <span>70% · 95%</span></div>
-        <div class="mc-row">Benchmark   <span>{_algo_bench}</span></div>
-        {_cache_row}
-    </div>
-    """)
-    if _minfo:
-        st.html(
-            f'<div style="font-size:10px;color:{C["text_3"]};font-family:{C["mono"]};">'
-            f'{_minfo.reason}</div>'
-        )
-
+# ─── Sidebar rendered globally by app.py ────────────────────────────────────
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
-_today = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")
+df = st.session_state.get("df")
+
+_today      = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")
 _model_ok   = "forecast_results" in st.session_state
 _from_cache = st.session_state.get("cache_status", {}).get("from_cache", False)
 _has_data   = df is not None
@@ -1004,7 +759,7 @@ st.html(f"""
     </div>
     <div class="sc-badges">
         <span class="badge {'badge-green' if _model_ok else 'badge-neutral'}">
-            {'● CACHÉ' if (_model_ok and _from_cache) else ('● LIVE' if _model_ok else '○ AWAITING RUN')}
+            {'● CACHÉ' if (_model_ok and _from_cache) else ('● LIVE' if _model_ok else '○ CALCULANDO')}
         </span>
         <span class="badge badge-blue">AutoETS · IC 70/95%</span>
         {f'<span class="badge badge-neutral">{_info_safe.get("n_skus","?")} SKUs</span>' if _has_data else ''}
@@ -1017,7 +772,7 @@ st.html(f"""
 if df is None:
     st.html(
         f'<div class="info-box" style="max-width:600px;">'
-        f'Select a data source in the sidebar and click <strong>▶ Run Forecast</strong> to begin.'
+        f'Selecciona una fuente de datos en el sidebar para comenzar.'
         f'</div>'
     )
     st.stop()
@@ -1027,14 +782,14 @@ if st.session_state.get("data_hash") != current_hash:
     _clear_results()
     st.session_state["data_hash"] = current_hash
 
-# ─── Run forecast ─────────────────────────────────────────────────────────────
-if run_btn or force_btn or "forecast_results" not in st.session_state:
-    _has_cache = (not force_btn) and (fc_module.cache_status(df) is not None)
-    _spinner   = "Cargando forecast de Supabase…" if _has_cache else "Calculando modelo (AutoETS + CV + historial, ~60 s)…"
+# ─── Run forecast (automático) ────────────────────────────────────────────────
+if "forecast_results" not in st.session_state:
+    _has_cache = fc_module.cache_status(df) is not None
+    _spinner   = "Cargando forecast de Supabase…" if _has_cache else "Calculando modelo (AutoETS, ~60 s)…"
 
     with st.spinner(_spinner):
         try:
-            results, from_cache = fc_module.get_or_compute(df, force=force_btn)
+            results, from_cache = fc_module.get_or_compute(df)
             st.session_state["forecast_results"] = results
             st.session_state["cache_status"] = {
                 "from_cache": from_cache,

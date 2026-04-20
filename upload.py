@@ -300,16 +300,24 @@ def upload_skus(
             raise UploadError(f"SKU {sku_id}: sin datos de demanda.")
         demand_row = demand_row.iloc[0]
 
+        # Determinar rango activo: primer y último índice con dato real
+        vals = [demand_row[d] for d in date_cols]
+        non_null = [i for i, v in enumerate(vals) if not pd.isna(v)]
+        if not non_null:
+            raise UploadError(f"SKU {sku_id}: todas las semanas están vacías.")
+        first_i, last_i = non_null[0], non_null[-1]
+
+        # Dentro del rango: NaN → 0 (gap). Fuera del rango: skip.
         hist_rows = [
             {
                 "sku_id":      sku_id,
-                "fecha":       d,
-                "demanda":     float(demand_row[d]),
+                "fecha":       date_cols[i],
+                "demanda":     0 if pd.isna(vals[i]) else int(vals[i]),
                 "precio":      precio,
                 "evento_tipo": 0,
                 "fuente":      "uploaded",
             }
-            for d in date_cols
+            for i in range(first_i, last_i + 1)
         ]
         BATCH = 200
         for i in range(0, len(hist_rows), BATCH):
@@ -318,7 +326,7 @@ def upload_skus(
             ).execute()
 
         # inventario
-        demand_series = pd.Series([float(demand_row[d]) for d in date_cols])
+        demand_series = pd.Series([float(v) if not pd.isna(v) else 0.0 for v in vals[first_i:last_i + 1]])
         stock, transito, fecha_llegada = _calc_inventory(
             sku_id, categoria, lead_time, demand_series
         )

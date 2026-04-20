@@ -348,13 +348,8 @@ def _get_override_hash() -> str:
 
 
 @st.cache_data(show_spinner=False)
-def _load_forecast(override_hash: str = "") -> dict | None:
-    """
-    Carga el forecast del caché de app.py y aplica overrides si existen.
-    El parámetro override_hash hace que st.cache_data invalide la entrada
-    cuando cambia overrides.json.
-    """
-    df_sim = data_module.get_historia_semanal()
+def _load_forecast(override_hash: str = "", fuente: str = "demo") -> dict | None:
+    df_sim = data_module.get_historia_semanal(fuentes=[fuente])
     try:
         results, _ = fc_module.get_or_compute(df_sim)
     except Exception:
@@ -708,13 +703,14 @@ def main() -> None:
     """)
 
     # ── Load data ─────────────────────────────────────────────────────────────
+    _fuente = st.session_state.get("data_source", "demo")
     with st.spinner("Cargando forecast y datos de inventario…"):
         productos = _load_productos()
         stock     = _load_stock()
-        fc_res    = _load_forecast(override_hash=_get_override_hash())
+        fc_res    = _load_forecast(override_hash=_get_override_hash(), fuente=_fuente)
 
     if fc_res is None:
-        st.error("No se pudo cargar el forecast. Ejecuta primero la página Forecast.")
+        st.error("No se pudo cargar el forecast. Ve a la página Forecast primero.")
         return
 
     fc_df_all = fc_res["forecasts"].copy()
@@ -723,58 +719,50 @@ def main() -> None:
     _ovr_all  = overrides_module.load()
     _ovr_skus = set(_ovr_all.keys())
 
-    # ── Sidebar ───────────────────────────────────────────────────────────────
-    with st.sidebar:
-        st.markdown("### COMPRA")
-        st.markdown("---")
+    # ── Compute replenishment ─────────────────────────────────────────────────
+    rep       = compute_replenishment(productos, stock, fc_res)
+    csv_bytes = _build_export_csv(rep)
 
-        run_orders = st.button("⟳  GENERAR ÓRDENES DE COMPRA", use_container_width=True)
-        st.markdown("---")
+    n_con_orden = (rep["order_qty"] > 0).sum()
+    n_urgente   = (rep["semaforo_label"] == "urgente").sum()
+    n_total     = len(rep)
 
-        with st.spinner("Calculando…"):
-            rep = compute_replenishment(productos, stock, fc_res)
-            csv_bytes = _build_export_csv(rep)
-
-        n_con_orden  = (rep["order_qty"] > 0).sum()
-        n_urgente    = (rep["semaforo_label"] == "urgente").sum()
-        n_total      = len(rep)
-
-        st.html(f"""
-        <div class="model-card">
-          <div class="mc-row">Total SKUs<span>{n_total}</span></div>
-          <div class="mc-row">Necesitan reposición<span style="color:{C['yellow']}">{n_con_orden}</span></div>
-          <div class="mc-row">Urgentes<span style="color:{C['red']}">{n_urgente}</span></div>
-          <div class="mc-row">Sin orden<span style="color:{C['green']}">{n_total - n_con_orden}</span></div>
-          {'<div class="mc-row">Con override<span style="color:' + C["yellow"] + '">' + str(len(_ovr_skus)) + '</span></div>' if _ovr_skus else ''}
-        </div>
-        """)
-
-        st.markdown("---")
-        _csv_fname = f"compra_{pd.Timestamp.today().strftime('%Y%m%d')}.csv"
+    # ── Generate orders button ────────────────────────────────────────────────
+    _btn_col, _exp_col = st.columns([3, 1])
+    with _btn_col:
+        run_orders = st.button(
+            "⟳  GENERAR ÓRDENES DE COMPRA",
+            use_container_width=True,
+        )
+    _csv_fname = f"compra_{pd.Timestamp.today().strftime('%Y%m%d')}.csv"
+    with _exp_col:
         if st.download_button(
-            label="↓  EXPORTAR CSV COMPLETO",
+            label="↓  EXPORTAR CSV",
             data=csv_bytes,
             file_name=_csv_fname,
             mime="text/csv",
             use_container_width=True,
         ):
             st.toast(f"✓ CSV exportado: {_csv_fname} ({len(rep)} SKUs)", icon="✅")
-        st.markdown("---")
-        st.html(f"""
-        <div style="font-size:10px;color:{C['text_3']};line-height:1.7;">
-        Modelo de revisión periódica semanal.<br>
-        Nivel de servicio endógeno basado en<br>
-        margen + costo reputacional vs. costo<br>
-        de tenencia (25 % anual / 52 sem).<br><br>
-        Forecast: AutoETS · 12 semanas<br>
-        Safety stock: z·&sigma;·&radic;LT
-        </div>
-        """)
+
+    # ── Stats summary ─────────────────────────────────────────────────────────
+    st.html(f"""
+    <div class="model-card" style="margin-bottom:20px;">
+      <div class="mc-row">Total SKUs<span>{n_total}</span></div>
+      <div class="mc-row">Necesitan reposición
+        <span style="color:{C['yellow']}">{n_con_orden}</span></div>
+      <div class="mc-row">Urgentes
+        <span style="color:{C['red']}">{n_urgente}</span></div>
+      <div class="mc-row">Sin orden
+        <span style="color:{C['green']}">{n_total - n_con_orden}</span></div>
+      {'<div class="mc-row">Con override<span style="color:' + C["yellow"] + '">' + str(len(_ovr_skus)) + '</span></div>' if _ovr_skus else ''}
+    </div>
+    """)
 
     if "rep_computed" not in st.session_state or run_orders:
         st.session_state["rep_computed"] = True
         if run_orders:
-            n_orders = int((rep["order_qty"] > 0).sum())
+            n_orders   = int((rep["order_qty"] > 0).sum())
             total_cost = float(rep[rep["order_qty"] > 0]["order_cost"].sum())
             st.toast(f"✓ {n_orders} órdenes generadas por ${total_cost:,.0f}", icon="✅")
 
