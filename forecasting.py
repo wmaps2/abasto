@@ -340,11 +340,8 @@ def get_or_compute(df: pd.DataFrame, force: bool = False) -> tuple[dict, bool]:
     cv, cv_skipped = run_cross_validation(df, minfo, counts=counts)
     metrics    = compute_metrics(cv) if not cv.empty else {}
     ets_params = get_ets_model_params(df, minfo)
-    print(f"[forecast] Forecast actual   {time.time() - t1:.1f}s", flush=True)
-
-    t2 = time.time()
-    fc_hist    = generate_forecast_history(df, minfo)
-    print(f"[forecast] Historial retro   {time.time() - t2:.1f}s", flush=True)
+    fc_hist    = pd.DataFrame()   # historial retro disponible en Supabase; no recalcular
+    print(f"[forecast] Forecast + CV     {time.time() - t1:.1f}s", flush=True)
 
     print(f"[forecast] TOTAL             {time.time() - t0:.1f}s", flush=True)
 

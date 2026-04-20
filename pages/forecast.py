@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import data as data_module
 import forecasting as fc_module
 import overrides as overrides_module
+import upload as upload_module
 
 # ─── Design tokens ────────────────────────────────────────────────────────────
 C = dict(
@@ -71,39 +72,6 @@ section[data-testid="stSidebar"] label {{
 section[data-testid="stSidebar"] h1,
 section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3 {{
-    color: {C['text_1']} !important;
-}}
-/* ── Custom tab bar (radio-based, scoped via .tab-nav-anchor sibling) ── */
-div[data-testid="element-container"]:has(.tab-nav-anchor) + div[data-testid="element-container"] div[data-testid="stRadio"] > label {{
-    display: none;
-}}
-div[data-testid="element-container"]:has(.tab-nav-anchor) + div[data-testid="element-container"] div[role="radiogroup"] {{
-    background-color: {C['bg_surface']} !important;
-    border-bottom: 1px solid {C['border']} !important;
-    border-radius: 0 !important;
-    gap: 0 !important;
-    padding: 0 !important;
-    margin-bottom: 0 !important;
-}}
-div[data-testid="element-container"]:has(.tab-nav-anchor) + div[data-testid="element-container"] div[role="radiogroup"] > label {{
-    background: transparent !important;
-    border: none !important;
-    border-bottom: 2px solid transparent !important;
-    border-radius: 0 !important;
-    padding: 10px 22px !important;
-    color: {C['text_2']} !important;
-    font-size: 11px !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.08em !important;
-    text-transform: uppercase !important;
-    margin-bottom: -1px !important;
-    transition: color 0.15s !important;
-}}
-div[data-testid="element-container"]:has(.tab-nav-anchor) + div[data-testid="element-container"] div[role="radiogroup"] > label:has(input:checked) {{
-    color: {C['blue']} !important;
-    border-bottom-color: {C['blue']} !important;
-}}
-div[data-testid="element-container"]:has(.tab-nav-anchor) + div[data-testid="element-container"] div[role="radiogroup"] > label:hover:not(:has(input:checked)) {{
     color: {C['text_1']} !important;
 }}
 .stSelectbox [data-baseweb="select"] > div {{
@@ -455,6 +423,11 @@ def comp_table_html(comp: pd.DataFrame) -> str:
     )
 
 
+def _wfmt(d) -> str:
+    ts = pd.Timestamp(d)
+    return f"W{ts.isocalendar().week:02d} ({ts.strftime('%d-%m-%Y')})"
+
+
 # ─── Chart functions ──────────────────────────────────────────────────────────
 def build_forecast_chart(
     hist: pd.DataFrame,
@@ -472,7 +445,7 @@ def build_forecast_chart(
         x=hist["fecha"], y=hist["cantidad"],
         name="Histórico", mode="lines",
         line=dict(color=C["text_2"], width=1.5),
-        hovertemplate="%{x|%Y-%m-%d}  <b>%{y:.1f}</b><extra>Histórico</extra>",
+        hovertemplate="%{x|W%W (%d-%m-%Y)}  <b>%{y:.1f}</b><extra>Histórico</extra>",
     ))
 
     ds = list(fc["ds"])
@@ -490,13 +463,18 @@ def build_forecast_chart(
         _ci_band(fig, ds, [max(0.0, v) for v in _raw_lo70], list(fc["AutoETS-hi-70"]),
                  "IC 70 %", "rgba(79,143,247,0.18)")
 
+    # Anchor: prepend last historical point so forecast line connects without gap
+    _last_hist = hist.sort_values("fecha").iloc[-1]
+    _fc_anchor_x = [_last_hist["fecha"]] + list(fc["ds"])
+    _fc_anchor_y = [float(_last_hist["cantidad"])] + list(fc["AutoETS"].clip(lower=0))
+
     # Forecast original del modelo (siempre azul punteado cuando hay override activo)
     original_name = "Forecast modelo (original)" if fc_override is not None else "Forecast (AutoETS)"
     fig.add_trace(go.Scatter(
-        x=fc["ds"], y=fc["AutoETS"].clip(lower=0),
+        x=_fc_anchor_x, y=_fc_anchor_y,
         name=original_name, mode="lines",
         line=dict(color=C["blue"], width=2, dash="dash"),
-        hovertemplate="%{x|%Y-%m-%d}  <b>%{y:.1f}</b><extra>Forecast modelo</extra>",
+        hovertemplate="%{x|W%W (%d-%m-%Y)}  <b>%{y:.1f}</b><extra>Forecast modelo</extra>",
     ))
 
     # Forecast con override: línea verde solo entre semanas consecutivas con override
@@ -509,7 +487,7 @@ def build_forecast_chart(
             line=dict(color=C["green"], width=2.5),
             marker=dict(color=C["green"], size=9, symbol="circle",
                         line=dict(color=C["bg_card"], width=1.5)),
-            hovertemplate="%{x|%Y-%m-%d}  <b>%{y:.1f}</b><extra>Override</extra>",
+            hovertemplate="%{x|W%W (%d-%m-%Y)}  <b>%{y:.1f}</b><extra>Override</extra>",
         ))
 
     if "SeasonalNaive" in fc.columns:
@@ -518,7 +496,7 @@ def build_forecast_chart(
             name="Naive estacional", mode="lines",
             line=dict(color=C["text_3"], width=1, dash="dot"),
             visible="legendonly",
-            hovertemplate="%{x|%Y-%m-%d}  <b>%{y:.1f}</b><extra>Naive</extra>",
+            hovertemplate="%{x|W%W (%d-%m-%Y)}  <b>%{y:.1f}</b><extra>Naive</extra>",
         ))
 
     last_str = hist["fecha"].max().strftime("%Y-%m-%d")
@@ -533,6 +511,7 @@ def build_forecast_chart(
               f"<span style='color:{C['text_3']};font-size:12px'> · Histórico + Forecast 12 semanas</span>",
         x_range=[x_start, x_end],
     )
+    fig.update_xaxes(tickformat="W%W\n(%d-%m-%Y)")
     fig.update_yaxes(rangemode="nonnegative")
     if _ic_truncated:
         fig.add_annotation(
@@ -555,7 +534,7 @@ def build_forecast_history_chart(
         x=hist["fecha"], y=hist["cantidad"],
         name="Venta real", mode="lines",
         line=dict(color=C["text_2"], width=1.5),
-        hovertemplate="%{x|%Y-%m-%d}  <b>%{y:.1f}</b><extra>Real</extra>",
+        hovertemplate="%{x|W%W (%d-%m-%Y)}  <b>%{y:.1f}</b><extra>Real</extra>",
     ))
 
     ds = list(fc["ds"])
@@ -577,7 +556,7 @@ def build_forecast_history_chart(
         x=fc["ds"], y=fc["AutoETS"].clip(lower=0),
         name="Forecast", mode="lines",
         line=dict(color=C["blue"], width=2, dash="dash"),
-        hovertemplate="%{x|%Y-%m-%d}  <b>%{y:.1f}</b><extra>Forecast</extra>",
+        hovertemplate="%{x|W%W (%d-%m-%Y)}  <b>%{y:.1f}</b><extra>Forecast</extra>",
     ))
 
     overlap = (
@@ -619,6 +598,7 @@ def build_forecast_history_chart(
               f"<span style='color:{C['text_3']};font-size:12px'> · Forecast del {run_str}</span>",
         x_range=[x_start, x_end],
     )
+    fig.update_xaxes(tickformat="W%W\n(%d-%m-%Y)")
     fig.update_yaxes(rangemode="nonnegative")
     if _ic_truncated_h:
         fig.add_annotation(
@@ -756,6 +736,21 @@ def _load_fc_run(date_str: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_sb_historia(fuentes: tuple[str, ...]) -> pd.DataFrame:
+    return data_module.get_historia_semanal(fuentes=list(fuentes))
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _count_uploaded() -> int:
+    return upload_module.get_uploaded_count()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _get_template_bytes() -> bytes:
+    return upload_module.build_template_xlsx()
+
+
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.html(f"""
@@ -770,45 +765,171 @@ with st.sidebar:
     </div>
     """)
 
-    st.html(f'<div class="section-hdr">Data Source</div>')
+    # ── DATOS PERSONALIZADOS ──────────────────────────────────────────────────
+    st.html(f'<div class="section-hdr">Datos personalizados</div>')
 
-    source = st.radio(
-        "Fuente",
-        ["Demo data", "Upload CSV"],
-        index=0,
-        label_visibility="collapsed",
-    )
+    _n_up = _count_uploaded()
+    _cv1, _cv2 = st.columns(2)
+    with _cv1:
+        _show_demo = st.checkbox("Demo (12 SKUs)", value=True, key="show_demo")
+    with _cv2:
+        _show_up = st.checkbox(
+            f"Subidos ({_n_up})",
+            value=(_n_up > 0),
+            key="show_uploaded",
+            disabled=(_n_up == 0),
+        )
+
+    # Load df from Supabase
+    _fuentes: list[str] = []
+    if _show_demo:
+        _fuentes.append("demo")
+    if _show_up and _n_up > 0:
+        _fuentes.append("uploaded")
 
     df: pd.DataFrame | None = None
-
-    if source == "Demo data":
-        df   = data_module.generate_simulated_data()
-        info = data_module.summary(df)
-        st.html(
-            f'<div class="ok-box">✓ {info["n_skus"]} SKUs · {info["n_weeks"]} semanas<br>'
-            f'<span style="font-weight:400;color:{C["text_2"]};font-size:11px;">'
-            f'{info["date_min"]} → {info["date_max"]}</span></div>'
-        )
+    if not _fuentes:
+        st.warning("Selecciona al menos una fuente de datos.")
     else:
-        uploaded = st.file_uploader(
-            "CSV: fecha, sku, cantidad",
-            type=["csv"],
-            label_visibility="collapsed",
-        )
-        if uploaded is not None:
-            df, err = data_module.load_csv(uploaded)
-            if err:
-                st.html(f'<div class="warn-box">✗ {err}</div>')
+        try:
+            df = _load_sb_historia(tuple(sorted(_fuentes)))
+            if df.empty:
                 df = None
+                st.html('<div class="warn-box">Sin datos para las fuentes seleccionadas.</div>')
             else:
-                info = data_module.summary(df)
+                _info = data_module.summary(df)
                 st.html(
-                    f'<div class="ok-box">✓ {info["n_skus"]} SKUs · {info["n_weeks"]} sem.<br>'
+                    f'<div class="ok-box">✓ {_info["n_skus"]} SKUs · {_info["n_weeks"]} semanas<br>'
                     f'<span style="font-weight:400;color:{C["text_2"]};font-size:11px;">'
-                    f'{info["date_min"]} → {info["date_max"]}</span></div>'
+                    f'{_info["date_min"]} → {_info["date_max"]}</span></div>'
                 )
+        except Exception as _exc:
+            if "42703" in str(_exc) or "does not exist" in str(_exc):
+                st.error(
+                    "Falta migración en Supabase. Ejecuta en SQL Editor:\n\n"
+                    "```sql\n" + upload_module.MIGRATION_SQL + "\n```"
+                )
+            else:
+                st.error(f"Error cargando datos: {_exc}")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Download template
+    try:
+        _tpl = _get_template_bytes()
+        st.download_button(
+            "📥 Download template",
+            data=_tpl,
+            file_name="abasto_template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+    except Exception:
+        st.button("📥 Download template (no disponible)", disabled=True, use_container_width=True)
+
+    # Upload CSV
+    _up_file = st.file_uploader(
+        "📤 Upload Excel",
+        type=["xlsx"],
+        label_visibility="visible",
+        key="sidebar_xlsx_uploader",
+    )
+
+    if _up_file is not None:
+        _fid = f"{_up_file.name}_{_up_file.size}"
+        # Reset state when a different file is selected
+        if st.session_state.get("_up_fid") != _fid:
+            st.session_state["_up_fid"] = _fid
+            for _k in ("_up_parsed", "_up_conflicts", "_up_replace_ok"):
+                st.session_state.pop(_k, None)
+
+        # Parse once
+        if "_up_parsed" not in st.session_state:
+            try:
+                _dm, _dd = upload_module.parse_upload(_up_file)
+                st.session_state["_up_parsed"]    = (_dm, _dd)
+                st.session_state["_up_conflicts"] = upload_module.check_conflicts(
+                    _dm["sku_id"].tolist()
+                )
+            except upload_module.UploadError as _e:
+                st.error(str(_e))
+
+        if "_up_parsed" in st.session_state:
+            _dm, _dd         = st.session_state["_up_parsed"]
+            _conflicts       = st.session_state.get("_up_conflicts", [])
+            _n_new           = len(_dm)
+
+            st.html(f'<div class="ok-box">✓ {_n_new} SKU(s) listos</div>')
+
+            if _conflicts and not st.session_state.get("_up_replace_ok"):
+                st.warning(f"Ya existen: {', '.join(_conflicts)}. ¿Reemplazar?")
+                _rc1, _rc2 = st.columns(2)
+                with _rc1:
+                    if st.button("Reemplazar", key="_btn_rep_yes", use_container_width=True):
+                        st.session_state["_up_replace_ok"] = True
+                        st.rerun()
+                with _rc2:
+                    if st.button("Cancelar", key="_btn_rep_no", use_container_width=True):
+                        for _k in ("_up_fid", "_up_parsed", "_up_conflicts", "_up_replace_ok"):
+                            st.session_state.pop(_k, None)
+                        st.rerun()
+            else:
+                _replace = bool(_conflicts) and st.session_state.get("_up_replace_ok", False)
+                if st.button("⬆ Confirmar upload", key="_btn_do_up", use_container_width=True):
+                    with st.spinner(f"Subiendo {_n_new} SKU(s) a Supabase…"):
+                        try:
+                            _done = upload_module.upload_skus(_dm, _dd, replace=_replace)
+                            st.session_state["_just_uploaded"] = _done
+                            for _k in ("_up_fid", "_up_parsed", "_up_conflicts", "_up_replace_ok"):
+                                st.session_state.pop(_k, None)
+                            _load_sb_historia.clear()
+                            _count_uploaded.clear()
+                            _clear_results()
+                            st.rerun()
+                        except upload_module.UploadError as _e:
+                            st.error(str(_e))
+
+    # Post-upload: toast + backfill button
+    if st.session_state.get("_just_uploaded"):
+        _done_ids = st.session_state["_just_uploaded"]
+        st.toast(f"✓ {len(_done_ids)} SKU(s) cargados", icon="✅")
+        st.html(
+            f'<div class="ok-box">✓ {len(_done_ids)} SKU(s) guardados:<br>'
+            f'<span style="font-size:11px;">{", ".join(_done_ids)}</span></div>'
+        )
+        if st.button("📊 Generar forecasts históricos (~2 min)",
+                     key="_btn_backfill", use_container_width=True):
+            with st.spinner("Generando forecasts históricos para todos los SKUs…"):
+                from simulation import backfill_forecasts
+                backfill_forecasts.main(n_weeks=24)
+            st.session_state.pop("_just_uploaded", None)
+            st.rerun()
+        if st.button("Cerrar", key="_btn_close_up", use_container_width=True):
+            st.session_state.pop("_just_uploaded", None)
+            st.rerun()
+
+    # Delete uploaded data
+    if _n_up > 0:
+        st.markdown("---")
+        if st.session_state.get("_confirm_del_up"):
+            st.warning(f"¿Borrar {_n_up} SKU(s) subidos? Irreversible.")
+            _dc1, _dc2 = st.columns(2)
+            with _dc1:
+                if st.button("Sí, borrar", key="_btn_del_yes", use_container_width=True):
+                    with st.spinner("Eliminando…"):
+                        upload_module.delete_uploaded_data()
+                    st.session_state.pop("_confirm_del_up", None)
+                    _load_sb_historia.clear()
+                    _count_uploaded.clear()
+                    _clear_results()
+                    st.rerun()
+            with _dc2:
+                if st.button("Cancelar", key="_btn_del_no", use_container_width=True):
+                    st.session_state.pop("_confirm_del_up", None)
         else:
-            st.html(f'<div class="info-box">Upload a CSV or switch to Demo data.</div>')
+            if st.button("🗑️ Borrar datos de usuario",
+                         key="_btn_del_trig", use_container_width=True):
+                st.session_state["_confirm_del_up"] = True
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -931,47 +1052,73 @@ ets_params = results.get("ets_params", {})
 cv_skipped = results.get("cv_skipped", [])
 
 
+# ─── Shared view state (synced across tabs via session_state) ────────────────
+_VIEW_OPTS = ["By SKU", "By Category", "All"]
+_all_skus  = sorted(df["sku"].unique())
+_all_cats  = sorted({_get_category(s) for s in df["sku"].unique()})
+if "_shared_view" not in st.session_state:
+    st.session_state["_shared_view"] = "By SKU"
+if "_shared_sku" not in st.session_state:
+    st.session_state["_shared_sku"] = _all_skus[0]
+if "_shared_cat" not in st.session_state:
+    st.session_state["_shared_cat"] = _all_cats[0]
+
 # ─── Navigation ───────────────────────────────────────────────────────────────
-if "active_tab" not in st.session_state:
-    st.session_state["active_tab"] = "Forecast"
-
-st.html('<div class="tab-nav-anchor"></div>')
-_active_tab = st.radio(
-    "Navigation",
-    ["Forecast", "Model Performance", "Sandbox"],
-    key="active_tab",
-    horizontal=True,
-    label_visibility="hidden",
-)
-st.html(f'<div style="background:{C["bg_base"]};padding-top:24px;"></div>')
-
+_tab_fc, _tab_mp, _tab_sb = st.tabs(["Forecast", "Model Performance", "Sandbox"])
 
 # ══ Tab 1: Forecast ═══════════════════════════════════════════════════════════
-if _active_tab == "Forecast":
-    col_a, col_b = st.columns([1, 3])
+with _tab_fc:
+    col_a, col_b = st.columns([3, 2])
     with col_a:
-        vista = st.radio("View", ["By SKU", "By Category"],
-                         horizontal=False, key="vista_selector")
+        vista = st.radio("View", _VIEW_OPTS,
+                         index=_VIEW_OPTS.index(st.session_state["_shared_view"]),
+                         horizontal=True, key="forecast_view")
+    st.session_state["_shared_view"] = vista
     with col_b:
         if vista == "By SKU":
-            skus = sorted(df["sku"].unique())
-            selected_sku = st.selectbox("SKU", skus, key="sku_selector",
+            _fc_sku_idx = _all_skus.index(st.session_state["_shared_sku"]) \
+                          if st.session_state["_shared_sku"] in _all_skus else 0
+            selected_sku = st.selectbox("SKU", _all_skus, index=_fc_sku_idx,
+                                        key="forecast_sku",
                                         label_visibility="collapsed")
-            hist_view   = df[df["sku"] == selected_sku].sort_values("fecha")
-            fc_view     = forecasts[forecasts["unique_id"] == selected_sku].copy()
-            chart_label = selected_sku
-        else:
-            categories = sorted({_get_category(s) for s in df["sku"].unique()})
+            st.session_state["_shared_sku"] = selected_sku
+        elif vista == "By Category":
+            _fc_cat_idx = _all_cats.index(st.session_state["_shared_cat"]) \
+                          if st.session_state["_shared_cat"] in _all_cats else 0
             selected_cat = st.selectbox(
-                "Category", categories,
+                "Category", _all_cats, index=_fc_cat_idx,
                 format_func=lambda c: f"Category {c}",
-                key="cat_selector",
+                key="forecast_cat",
                 label_visibility="collapsed",
             )
-            n_cat = sum(1 for s in df["sku"].unique() if _get_category(s) == selected_cat)
-            st.caption(f"{n_cat} SKU(s) · aggregated (sum)")
-            hist_view, fc_view = _aggregate_by_category(df, forecasts, selected_cat)
-            chart_label = f"Category {selected_cat}"
+            st.session_state["_shared_cat"] = selected_cat
+
+    if vista == "All":
+        hist_view   = df.copy()
+        fc_view     = forecasts.copy()
+        chart_label = "All SKUs"
+        # aggregate all SKUs
+        hist_view = (hist_view.groupby("fecha", as_index=False)["cantidad"].sum()
+                     .assign(sku="ALL").sort_values("fecha"))
+        fc_cols = ["ds", "AutoETS", "AutoETS-lo-70", "AutoETS-hi-70",
+                   "AutoETS-lo-95", "AutoETS-hi-95"]
+        _fc_agg = fc_view.copy()
+        for col in fc_cols[1:]:
+            if col not in _fc_agg.columns:
+                _fc_agg[col] = None
+        fc_view = (_fc_agg.groupby("ds", as_index=False)[fc_cols[1:]].sum()
+                   .assign(unique_id="ALL").sort_values("ds"))
+    elif vista == "By SKU":
+        selected_sku = st.session_state["_shared_sku"]
+        hist_view   = df[df["sku"] == selected_sku].sort_values("fecha")
+        fc_view     = forecasts[forecasts["unique_id"] == selected_sku].copy()
+        chart_label = selected_sku
+    else:
+        selected_cat = st.session_state["_shared_cat"]
+        n_cat = sum(1 for s in df["sku"].unique() if _get_category(s) == selected_cat)
+        st.caption(f"{n_cat} SKU(s) · aggregated (sum)")
+        hist_view, fc_view = _aggregate_by_category(df, forecasts, selected_cat)
+        chart_label = f"Category {selected_cat}"
 
     if fc_view.empty:
         st.html('<div class="warn-box">No forecast generated for this selection.</div>')
@@ -1116,31 +1263,38 @@ if _active_tab == "Forecast":
 
 
 # ══ Tab 2: Model Performance ══════════════════════════════════════════════════
-elif _active_tab == "Model Performance":
+with _tab_mp:
 
     # ── Controls ─────────────────────────────────────────────────────────────
     # ── Row 1: View radio + conditional SKU/Category dropdown ────────────────
     _r1_view, _r1_filter, _r1_pad = st.columns([3, 2, 2])
     with _r1_view:
         _pv = st.radio(
-            "View", ["All", "By SKU", "By Category"],
-            horizontal=True, key="perf_view",
+            "View", _VIEW_OPTS,
+            index=_VIEW_OPTS.index(st.session_state["_shared_view"]),
+            horizontal=True, key="model_perf_view",
         )
+    st.session_state["_shared_view"] = _pv
     with _r1_filter:
         if _pv == "By SKU":
             st.html('<div style="height:28px"></div>')
+            _mp_sku_idx = _all_skus.index(st.session_state["_shared_sku"]) \
+                          if st.session_state["_shared_sku"] in _all_skus else 0
             _pv_sku = st.selectbox(
-                "SKU", sorted(df["sku"].unique()),
-                key="perf_sku", label_visibility="collapsed",
+                "SKU", _all_skus, index=_mp_sku_idx,
+                key="model_perf_sku", label_visibility="collapsed",
             )
+            st.session_state["_shared_sku"] = _pv_sku
         elif _pv == "By Category":
             st.html('<div style="height:28px"></div>')
+            _mp_cat_idx = _all_cats.index(st.session_state["_shared_cat"]) \
+                          if st.session_state["_shared_cat"] in _all_cats else 0
             _pv_cat = st.selectbox(
-                "Category",
-                sorted({_get_category(s) for s in df["sku"].unique()}),
+                "Category", _all_cats, index=_mp_cat_idx,
                 format_func=lambda c: f"Category {c}",
-                key="perf_cat", label_visibility="collapsed",
+                key="model_perf_cat", label_visibility="collapsed",
             )
+            st.session_state["_shared_cat"] = _pv_cat
 
     # Available run dates: Supabase first, then local fc_hist fallback
     _p_sb_dates = _load_all_sb_dates()
@@ -1165,7 +1319,7 @@ elif _active_tab == "Model Performance":
             _p_run = st.selectbox(
                 "Forecast run date", _p_all_dates,
                 index=len(_p_all_dates) - 1,
-                format_func=lambda d: str(d)[:10],
+                format_func=_wfmt,
                 key="perf_run_date",
             )
 
@@ -1239,6 +1393,14 @@ elif _active_tab == "Model Performance":
                        else _p_overlap)
                 return f"{sub['ape'].mean() * 100:.1f}%" if not sub.empty else "—"
 
+            def _bh(h: int | None = None) -> str:
+                if not _has_overlap:
+                    return "—"
+                sub = (_p_overlap[_p_overlap["horizonte"] <= h]
+                       if h and "horizonte" in _p_overlap.columns
+                       else _p_overlap)
+                return f"{sub['pe'].mean() * 100:+.1f}%" if not sub.empty else "—"
+
             _p_n_in, _p_n_tot = 0, len(_p_overlap)
             if _has_overlap and "AutoETS-lo-70" in _p_overlap.columns:
                 _p_n_in = int(
@@ -1247,21 +1409,20 @@ elif _active_tab == "Model Performance":
                 )
 
             # ── Section 1: Overview KPI cards ─────────────────────────────────
-            section(f"Overview — run: {str(_p_run)[:10]}  ·  {_chart_lbl}")
+            section(f"Overview — run: {_wfmt(_p_run)}  ·  {_chart_lbl}")
             kpi_row(
-                dict(label="MAPE H1",
-                     value=_mh(1),
-                     delta="horizon week 1", delta_cls="neu"),
                 dict(label="MAPE H4",
                      value=_mh(4),
+                     delta="horizons 1-4", delta_cls="neu"),
+                dict(label="Bias H4",
+                     value=_bh(4),
                      delta="horizons 1-4", delta_cls="neu"),
                 dict(label="MAPE H12",
                      value=_mh(12),
                      delta="all 12 horizons", delta_cls="neu"),
-                dict(label="Bias",
-                     value=(f"{_p_overlap['pe'].mean() * 100:+.1f}%"
-                            if _has_overlap else "—"),
-                     delta="+ overestimate  -  underestimate", delta_cls="neu"),
+                dict(label="Bias H12",
+                     value=_bh(12),
+                     delta="all 12 horizons", delta_cls="neu"),
                 dict(label="Inside IC 70%",
                      value=(f"{_p_n_in}/{_p_n_tot}"
                             if _p_n_tot > 0 else "—"),
@@ -1283,29 +1444,38 @@ elif _active_tab == "Model Performance":
                 f'{len(_p_all_dates)} runs available</div>'
             )
 
-            # ── Section 3: MAPE by Horizon ────────────────────────────────────
+            # ── Section 3: MAPE + BIAS by Horizon ────────────────────────────
             if _has_overlap and "horizonte" in _p_overlap.columns:
-                section("MAPE by Horizon")
-                _ph = (_p_overlap.groupby("horizonte")["ape"]
-                       .mean().mul(100).reset_index()
-                       .rename(columns={"ape": "mape"}))
+                section("MAPE & Bias by Horizon")
+                _ph = (_p_overlap.groupby("horizonte")
+                       .agg(mape=("ape", "mean"), bias=("pe", "mean"))
+                       .mul(100).reset_index())
                 if not _ph.empty:
                     _fig_ph = go.Figure()
                     _fig_ph.add_trace(go.Scatter(
                         x=_ph["horizonte"], y=_ph["mape"],
-                        mode="lines+markers",
+                        mode="lines+markers", name="MAPE",
                         line=dict(color=C["blue"], width=2),
                         marker=dict(size=7, color=C["blue"],
                                     line=dict(color=C["bg_card"], width=1.5)),
                         hovertemplate="H%{x}  <b>%{y:.1f}%</b><extra>MAPE</extra>",
                     ))
+                    _fig_ph.add_trace(go.Scatter(
+                        x=_ph["horizonte"], y=_ph["bias"],
+                        mode="lines+markers", name="Bias",
+                        line=dict(color="#FF8C42", width=2, dash="dot"),
+                        marker=dict(size=7, color="#FF8C42",
+                                    line=dict(color=C["bg_card"], width=1.5)),
+                        hovertemplate="H%{x}  <b>%{y:+.1f}%</b><extra>Bias</extra>",
+                    ))
                     _fig_ph.update_layout(
                         template="plotly_dark",
                         paper_bgcolor=_PBG, plot_bgcolor=_PBG,
-                        height=260, margin=dict(l=0, r=0, t=30, b=0),
+                        height=280, margin=dict(l=0, r=0, t=30, b=0),
                         font=dict(color=C["text_2"], family="Inter,sans-serif", size=11),
                         hoverlabel=_HOVER, hovermode="x unified",
-                        legend=dict(bgcolor="rgba(0,0,0,0)", borderwidth=0),
+                        legend=dict(bgcolor="rgba(0,0,0,0)", borderwidth=0,
+                                    orientation="h", x=0, y=1.12),
                         xaxis=dict(
                             title="Horizon week",
                             showgrid=True, gridcolor=_GRID, zeroline=False,
@@ -1315,9 +1485,10 @@ elif _active_tab == "Model Performance":
                             title_font=dict(size=10, color=C["text_3"]),
                         ),
                         yaxis=dict(
-                            title="MAPE %",
-                            showgrid=True, gridcolor=_GRID, zeroline=False,
-                            rangemode="tozero", tickformat=".1f",
+                            title="%",
+                            showgrid=True, gridcolor=_GRID, zeroline=True,
+                            zerolinecolor=_GRID, zerolinewidth=1,
+                            tickformat=".1f",
                             tickfont=dict(family="Courier New,monospace", size=10,
                                           color=C["text_2"]),
                             title_font=dict(size=10, color=C["text_3"]),
@@ -1356,6 +1527,11 @@ elif _active_tab == "Model Performance":
                                if h and "horizonte" in g.columns else g)
                         return sub["ape"].mean() * 100 if not sub.empty else float("nan")
 
+                    def _bias_grp(g: pd.DataFrame, h: int | None = None) -> float:
+                        sub = (g[g["horizonte"] <= h]
+                               if h and "horizonte" in g.columns else g)
+                        return sub["pe"].mean() * 100 if not sub.empty else float("nan")
+
                     def _cls_m(v):
                         return ("good" if v < 15 else ("warn" if v < 25 else "bad"))
                     def _cls_b(v):
@@ -1369,25 +1545,26 @@ elif _active_tab == "Model Performance":
                                 ((_g["cantidad"] >= _g["AutoETS-lo-70"]) &
                                  (_g["cantidad"] <= _g["AutoETS-hi-70"])).sum()
                             )
-                        _m1  = _mape_grp(_g, 1)
                         _m4  = _mape_grp(_g, 4)
+                        _b4  = _bias_grp(_g, 4)
                         _m12 = _mape_grp(_g, 12)
-                        _b   = _g["pe"].mean() * 100
+                        _b12 = _bias_grp(_g, 12)
                         _rows_html += (
                             f'<tr><td>{_sk}</td>'
-                            f'<td class="{_cls_m(_m1)}">'
-                            f'{"—" if pd.isna(_m1) else f"{_m1:.1f}%"}</td>'
                             f'<td class="{_cls_m(_m4)}">'
                             f'{"—" if pd.isna(_m4) else f"{_m4:.1f}%"}</td>'
+                            f'<td class="{_cls_b(_b4)}">'
+                            f'{"—" if pd.isna(_b4) else f"{_b4:+.1f}%"}</td>'
                             f'<td class="{_cls_m(_m12)}">'
                             f'{"—" if pd.isna(_m12) else f"{_m12:.1f}%"}</td>'
-                            f'<td class="{_cls_b(_b)}">{_b:+.1f}%</td>'
+                            f'<td class="{_cls_b(_b12)}">'
+                            f'{"—" if pd.isna(_b12) else f"{_b12:+.1f}%"}</td>'
                             f'<td>{_g_in}/{len(_g)}</td></tr>'
                         )
                     st.html(
                         '<table class="acc-table"><thead><tr>'
-                        '<th>SKU</th><th>MAPE H1</th><th>MAPE H4</th>'
-                        '<th>MAPE H12</th><th>Bias</th><th>Inside IC 70%</th>'
+                        '<th>SKU</th><th>MAPE H4</th><th>Bias H4</th>'
+                        '<th>MAPE H12</th><th>Bias H12</th><th>Inside IC 70%</th>'
                         '</tr></thead>'
                         f'<tbody>{_rows_html}</tbody></table>'
                     )
@@ -1401,34 +1578,10 @@ elif _active_tab == "Model Performance":
                     st.html(
                         '<div class="info-box">No hay semanas realizadas para comparar.</div>'
                     )
-            else:  # By SKU — per-horizon detail
-                section("Per-Horizon Detail")
-                if _has_overlap and "horizonte" in _p_overlap.columns:
-                    _tbl_h = _p_overlap[
-                        ["horizonte", "ds", "AutoETS", "cantidad", "ape"]
-                    ].copy()
-                    _tbl_h["MAPE %"] = (_tbl_h["ape"] * 100).round(1)
-                    _tbl_h = _tbl_h.rename(columns={
-                        "horizonte": "H",
-                        "ds": "Semana",
-                        "AutoETS": "Forecast",
-                        "cantidad": "Actual",
-                    })
-                    _tbl_h["Semana"]   = _tbl_h["Semana"].dt.strftime("%Y-%m-%d")
-                    _tbl_h["Forecast"] = _tbl_h["Forecast"].round(1)
-                    _tbl_h["Actual"]   = _tbl_h["Actual"].round(1)
-                    st.dataframe(
-                        _tbl_h[["H", "Semana", "Forecast", "Actual", "MAPE %"]],
-                        use_container_width=True, hide_index=True,
-                    )
-                else:
-                    st.html(
-                        '<div class="info-box">No hay semanas realizadas para este forecast.</div>'
-                    )
 
 
 # ══ Tab 3: Sandbox ════════════════════════════════════════════════════════════
-elif _active_tab == "Sandbox":
+with _tab_sb:
     section("Live Demo Sandbox")
     st.html(
         f'<div class="info-box">Ingresa hasta 8 semanas de demanda y pulsa '

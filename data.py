@@ -68,19 +68,35 @@ def get_productos() -> pd.DataFrame:
     return df
 
 
-def get_historia_semanal() -> pd.DataFrame:
+def _col_missing(exc) -> bool:
+    """True si el error de Supabase es por columna inexistente (código 42703)."""
+    msg = str(exc)
+    return "42703" in msg or "does not exist" in msg
+
+
+def get_historia_semanal(fuentes: list[str] | None = None) -> pd.DataFrame:
     """
     Retorna historial de demanda semanal.
     Columnas: fecha (datetime), sku, cantidad
-    Compatible con el formato que espera forecasting.py.
+    fuentes: filtro por columna 'fuente' (ej. ['demo','uploaded']). None = todas.
+    Si la columna 'fuente' aún no existe en la BD, carga todo sin filtrar.
     """
     sb, PAGE = _get_client(), 1000
     rows, offset = [], 0
+    use_filter = fuentes is not None
     while True:
-        page = (sb.table("historia_semanal")
-                  .select("sku_id, fecha, demanda")
-                  .range(offset, offset + PAGE - 1)
-                  .execute().data)
+        q = sb.table("historia_semanal").select("sku_id, fecha, demanda")
+        if use_filter:
+            q = q.in_("fuente", fuentes)
+        try:
+            page = q.range(offset, offset + PAGE - 1).execute().data
+        except Exception as exc:
+            if use_filter and _col_missing(exc):
+                use_filter = False  # columna no existe aún → carga sin filtro
+                offset = 0
+                rows = []
+                continue
+            raise
         rows.extend(page)
         if len(page) < PAGE:
             break

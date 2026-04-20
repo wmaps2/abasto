@@ -45,7 +45,7 @@ def generate_simulated_data() -> pd.DataFrame:
             seasonal = _seasonal(i, cfg["pattern"], cfg["amp"])
             level    = max(0.0, cfg["base"] + cfg["trend"] * i + seasonal)
             qty      = max(0.0, np.random.normal(level, cfg["noise"]))
-            records.append({"fecha": date, "sku": sku, "cantidad": round(qty, 1)})
+            records.append({"fecha": date, "sku": sku, "cantidad": int(round(qty))})
 
     return pd.DataFrame(records)
 
