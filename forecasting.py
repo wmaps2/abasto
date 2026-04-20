@@ -356,7 +356,7 @@ def get_or_compute(df: pd.DataFrame, force: bool = False) -> tuple[dict, bool]:
         model_info   = minfo,
         ets_params   = ets_params,
         cv_skipped   = cv_skipped,
-        computed_at  = pd.Timestamp.now(),
+        computed_at  = pd.Timestamp(df["fecha"].max()).normalize(),
         from_supabase= False,
     )
     try:
