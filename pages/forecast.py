@@ -73,32 +73,38 @@ section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3 {{
     color: {C['text_1']} !important;
 }}
-.stTabs [data-baseweb="tab-list"] {{
-    background-color: {C['bg_surface']};
-    border-bottom: 1px solid {C['border']};
-    gap: 0;
-    padding: 0;
+/* ── Custom tab bar (radio-based, scoped via .tab-nav-anchor sibling) ── */
+div[data-testid="element-container"]:has(.tab-nav-anchor) + div[data-testid="element-container"] div[data-testid="stRadio"] > label {{
+    display: none;
 }}
-.stTabs [data-baseweb="tab"] {{
-    color: {C['text_2']} !important;
-    background-color: transparent !important;
+div[data-testid="element-container"]:has(.tab-nav-anchor) + div[data-testid="element-container"] div[role="radiogroup"] {{
+    background-color: {C['bg_surface']} !important;
+    border-bottom: 1px solid {C['border']} !important;
+    border-radius: 0 !important;
+    gap: 0 !important;
+    padding: 0 !important;
+    margin-bottom: 0 !important;
+}}
+div[data-testid="element-container"]:has(.tab-nav-anchor) + div[data-testid="element-container"] div[role="radiogroup"] > label {{
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
     border-radius: 0 !important;
     padding: 10px 22px !important;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    border-bottom: 2px solid transparent !important;
-    margin-bottom: -1px;
+    color: {C['text_2']} !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    margin-bottom: -1px !important;
+    transition: color 0.15s !important;
 }}
-.stTabs [aria-selected="true"] {{
+div[data-testid="element-container"]:has(.tab-nav-anchor) + div[data-testid="element-container"] div[role="radiogroup"] > label:has(input:checked) {{
     color: {C['blue']} !important;
     border-bottom-color: {C['blue']} !important;
-    background-color: transparent !important;
 }}
-.stTabs [data-baseweb="tab-panel"] {{
-    background-color: {C['bg_base']};
-    padding-top: 24px;
+div[data-testid="element-container"]:has(.tab-nav-anchor) + div[data-testid="element-container"] div[role="radiogroup"] > label:hover:not(:has(input:checked)) {{
+    color: {C['text_1']} !important;
 }}
 .stSelectbox [data-baseweb="select"] > div {{
     background-color: {C['bg_card']} !important;
@@ -925,16 +931,23 @@ ets_params = results.get("ets_params", {})
 cv_skipped = results.get("cv_skipped", [])
 
 
-# ─── Tabs ─────────────────────────────────────────────────────────────────────
-tab_fc, tab_perf, tab_sandbox = st.tabs([
-    "Forecast",
-    "Model Performance",
-    "Sandbox",
-])
+# ─── Navigation ───────────────────────────────────────────────────────────────
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = "Forecast"
+
+st.html('<div class="tab-nav-anchor"></div>')
+_active_tab = st.radio(
+    "Navigation",
+    ["Forecast", "Model Performance", "Sandbox"],
+    key="active_tab",
+    horizontal=True,
+    label_visibility="hidden",
+)
+st.html(f'<div style="background:{C["bg_base"]};padding-top:24px;"></div>')
 
 
 # ══ Tab 1: Forecast ═══════════════════════════════════════════════════════════
-with tab_fc:
+if _active_tab == "Forecast":
     col_a, col_b = st.columns([1, 3])
     with col_a:
         vista = st.radio("View", ["By SKU", "By Category"],
@@ -1103,7 +1116,7 @@ with tab_fc:
 
 
 # ══ Tab 2: Model Performance ══════════════════════════════════════════════════
-with tab_perf:
+elif _active_tab == "Model Performance":
 
     # ── Controls ─────────────────────────────────────────────────────────────
     # ── Row 1: View radio + conditional SKU/Category dropdown ────────────────
@@ -1151,6 +1164,7 @@ with tab_perf:
         else:
             _p_run = st.selectbox(
                 "Forecast run date", _p_all_dates,
+                index=len(_p_all_dates) - 1,
                 format_func=lambda d: str(d)[:10],
                 key="perf_run_date",
             )
@@ -1414,7 +1428,7 @@ with tab_perf:
 
 
 # ══ Tab 3: Sandbox ════════════════════════════════════════════════════════════
-with tab_sandbox:
+elif _active_tab == "Sandbox":
     section("Live Demo Sandbox")
     st.html(
         f'<div class="info-box">Ingresa hasta 8 semanas de demanda y pulsa '
