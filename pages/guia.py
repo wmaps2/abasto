@@ -19,29 +19,8 @@ def main() -> None:
         - **Predecir** demanda futura con modelos automáticos (AutoETS)
         - **Evaluar** la precisión de tus predicciones con métricas reales
         - **Optimizar** órdenes de compra basadas en nivel de servicio endógeno
-
-        **Flujo recomendado:** Forecast → Accuracy → Compra
         """
     )
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.info("Selecciona el tab **Forecast** en el menú superior para comenzar.")
-    with col2:
-        try:
-            import upload as upload_module
-            _tpl = upload_module.build_template_xlsx()
-            st.download_button(
-                "Descargar template",
-                data=_tpl,
-                file_name="abasto_template.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                type="secondary",
-            )
-        except Exception:
-            st.button("Descargar template", disabled=True, use_container_width=True,
-                      type="secondary")
 
     st.divider()
 
