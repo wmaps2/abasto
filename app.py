@@ -209,18 +209,18 @@ with st.sidebar:
     try:
         _tpl = _get_template_bytes()
         st.download_button(
-            "📥 Download template",
+            "📥 Descargar plantilla",
             data=_tpl,
             file_name="abasto_template.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
     except Exception:
-        st.button("📥 Download template (no disponible)", disabled=True, use_container_width=True)
+        st.button("📥 Descargar plantilla (no disponible)", disabled=True, use_container_width=True)
 
     # ── Upload Excel ──────────────────────────────────────────────────────────
     _up_file = st.file_uploader(
-        "📤 Upload Excel",
+        "📤 Cargar Excel",
         type=["xlsx"],
         label_visibility="visible",
         key="sidebar_xlsx_uploader",
@@ -264,7 +264,7 @@ with st.sidebar:
                         st.rerun()
             else:
                 _replace = bool(_conflicts) and st.session_state.get("_up_replace_ok", False)
-                if st.button("⬆ Confirmar upload", key="_btn_do_up", use_container_width=True):
+                if st.button("⬆ Confirmar carga", key="_btn_do_up", use_container_width=True):
                     with st.spinner(f"Subiendo {_n_new} SKU(s) a Supabase…"):
                         try:
                             _done = upload_module.upload_skus(_dm, _dd, replace=_replace)

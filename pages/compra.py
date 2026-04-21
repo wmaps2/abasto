@@ -595,7 +595,7 @@ def _render_category_summary(rep: pd.DataFrame, ovr_skus: set | None = None) -> 
             ovr_tag = (
                 ' <span style="background:rgba(245,197,66,0.15);color:#f5c542;'
                 'border:1px solid #f5c542;border-radius:3px;font-size:9px;'
-                'padding:1px 4px;font-weight:700;">OVR</span>'
+                'padding:1px 4px;font-weight:700;">AJU</span>'
                 if ovr_skus and r["sku"] in ovr_skus else ""
             )
             rows_html += f"""
@@ -695,7 +695,7 @@ def main() -> None:
         </div>
       </div>
       <div class="sc-badges">
-        {_badge("Phase 2", "blue")}
+        {_badge("Fase 2", "blue")}
         {_badge(today_str, "neutral")}
         {_badge("Revisión Semanal", "yellow")}
       </div>
@@ -771,7 +771,7 @@ def main() -> None:
         <span style="color:{C['red']}">{n_urgente}</span></div>
       <div class="mc-row">Sin orden
         <span style="color:{C['green']}">{n_total - n_con_orden}</span></div>
-      {'<div class="mc-row">Con override<span style="color:' + C["yellow"] + '">' + str(len(_ovr_skus)) + '</span></div>' if _ovr_skus else ''}
+      {'<div class="mc-row">Con ajuste<span style="color:' + C["yellow"] + '">' + str(len(_ovr_skus)) + '</span></div>' if _ovr_skus else ''}
     </div>
     """)
 
@@ -866,7 +866,7 @@ def _render_table(rep: pd.DataFrame, ovr_skus: set | None = None) -> None:
         <th>Nivel Serv. %</th>
         <th>Pos. Inv.</th>
         <th>P. Reorden</th>
-        <th>Safety Stock</th>
+        <th>Stock seg.</th>
         <th>FC próx. LT sem.</th>
         <th>Cob. obj. (sem)</th>
         <th>Orden sugerida</th>
@@ -885,7 +885,7 @@ def _render_table(rep: pd.DataFrame, ovr_skus: set | None = None) -> None:
         ovr_tag = (
             ' <span style="background:rgba(245,197,66,0.15);color:#f5c542;'
             'border:1px solid #f5c542;border-radius:3px;font-size:9px;'
-            'padding:1px 4px;font-weight:700;">OVR</span>'
+            'padding:1px 4px;font-weight:700;">AJU</span>'
             if ovr_skus and r["sku"] in ovr_skus else ""
         )
         rows_html += f"""
@@ -1157,7 +1157,7 @@ def _render_projection_chart(proj: pd.DataFrame, row: pd.Series) -> None:
                   xref="x", yref="y",
                   line=dict(color=C["red"], width=1.5, dash="dash"))
     fig.add_annotation(x=x1_date, y=ss, xref="x", yref="y",
-                       text=f"SS {ss:,.0f}u", showarrow=False,
+                       text=f"Stock seg. {ss:,.0f}u", showarrow=False,
                        font=dict(color=C["red"], size=10),
                        xanchor="right", yanchor="bottom")
 

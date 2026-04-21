@@ -461,7 +461,7 @@ def build_forecast_chart(
     _fc_anchor_y = [float(_last_hist["cantidad"])] + list(fc["AutoETS"].clip(lower=0))
 
     # Forecast original del modelo (siempre azul punteado cuando hay override activo)
-    original_name = "Forecast modelo (original)" if fc_override is not None else "Forecast (AutoETS)"
+    original_name = "Forecast modelo (original)" if fc_override is not None else "Forecast (AutoETS)"  # names kept
     fig.add_trace(go.Scatter(
         x=_fc_anchor_x, y=_fc_anchor_y,
         name=original_name, mode="lines",
@@ -474,12 +474,12 @@ def build_forecast_chart(
         _ovr_x, _ovr_y = fc_override
         fig.add_trace(go.Scatter(
             x=_ovr_x, y=_ovr_y,
-            name="Forecast con override", mode="lines+markers",
+            name="Forecast con ajuste", mode="lines+markers",
             connectgaps=False,
             line=dict(color=C["green"], width=2.5),
             marker=dict(color=C["green"], size=9, symbol="circle",
                         line=dict(color=C["bg_card"], width=1.5)),
-            hovertemplate="%{x|W%W (%d-%m-%Y)}  <b>%{y:.1f}</b><extra>Override</extra>",
+            hovertemplate="%{x|W%W (%d-%m-%Y)}  <b>%{y:.1f}</b><extra>Ajuste</extra>",
         ))
 
     if "SeasonalNaive" in fc.columns:
@@ -801,36 +801,36 @@ cv_skipped = results.get("cv_skipped", [])
 
 
 # ─── Shared view state (synced across tabs via session_state) ────────────────
-_VIEW_OPTS = ["By SKU", "By Category", "All"]
+_VIEW_OPTS = ["Por SKU", "Por Categoría", "Todos"]
 _all_skus  = sorted(df["sku"].unique())
 _all_cats  = sorted({_get_category(s) for s in df["sku"].unique()} - {"?"})
 if "_shared_view" not in st.session_state:
-    st.session_state["_shared_view"] = "By SKU"
+    st.session_state["_shared_view"] = "Por SKU"
 if "_shared_sku" not in st.session_state:
     st.session_state["_shared_sku"] = _all_skus[0]
 if "_shared_cat" not in st.session_state:
     st.session_state["_shared_cat"] = _all_cats[0]
 
 # ─── Navigation ───────────────────────────────────────────────────────────────
-_tab_fc, _tab_mp, _tab_sb = st.tabs(["Forecast", "Model Performance", "Sandbox"])
+_tab_fc, _tab_mp, _tab_sb = st.tabs(["Forecast", "Rendimiento del modelo", "Simulador"])
 
 # ══ Tab 1: Forecast ═══════════════════════════════════════════════════════════
 with _tab_fc:
     col_a, col_b = st.columns([3, 2])
     with col_a:
-        vista = st.radio("View", _VIEW_OPTS,
+        vista = st.radio("Vista", _VIEW_OPTS,
                          index=_VIEW_OPTS.index(st.session_state["_shared_view"]),
                          horizontal=True, key="forecast_view")
     st.session_state["_shared_view"] = vista
     with col_b:
-        if vista == "By SKU":
+        if vista == "Por SKU":
             _fc_sku_idx = _all_skus.index(st.session_state["_shared_sku"]) \
                           if st.session_state["_shared_sku"] in _all_skus else 0
             selected_sku = st.selectbox("SKU", _all_skus, index=_fc_sku_idx,
                                         key="forecast_sku",
                                         label_visibility="collapsed")
             st.session_state["_shared_sku"] = selected_sku
-        elif vista == "By Category":
+        elif vista == "Por Categoría":
             _fc_cat_idx = _all_cats.index(st.session_state["_shared_cat"]) \
                           if st.session_state["_shared_cat"] in _all_cats else 0
             selected_cat = st.selectbox(
@@ -841,11 +841,11 @@ with _tab_fc:
             )
             st.session_state["_shared_cat"] = selected_cat
 
-    if vista == "All":
+    if vista == "Todos":
         hist_view   = df.copy()
         fc_view     = forecasts.copy()
-        chart_label = "All SKUs"
-        # aggregate all SKUs
+        chart_label = "Todos los SKUs"
+        # agregar todos los SKUs
         hist_view = (hist_view.groupby("fecha", as_index=False)["cantidad"].sum()
                      .assign(sku="ALL").sort_values("fecha"))
         fc_cols = ["ds", "AutoETS", "AutoETS-lo-70", "AutoETS-hi-70",
@@ -856,7 +856,7 @@ with _tab_fc:
                 _fc_agg[col] = None
         fc_view = (_fc_agg.groupby("ds", as_index=False)[fc_cols[1:]].sum()
                    .assign(unique_id="ALL").sort_values("ds"))
-    elif vista == "By SKU":
+    elif vista == "Por SKU":
         selected_sku = st.session_state["_shared_sku"]
         hist_view   = df[df["sku"] == selected_sku].sort_values("fecha")
         fc_view     = forecasts[forecasts["unique_id"] == selected_sku].copy()
@@ -869,14 +869,14 @@ with _tab_fc:
         chart_label = f"Category {selected_cat}"
 
     if fc_view.empty:
-        st.html('<div class="warn-box">No forecast generated for this selection.</div>')
+        st.html('<div class="warn-box">Sin forecast para esta selección.</div>')
     else:
         # ── Overrides (By SKU only) ───────────────────────────────────────────
         _fc_override: pd.DataFrame | None = None
         _has_ovr = False
         _sku_ovr: dict = {}
 
-        if vista == "By SKU":
+        if vista == "Por SKU":
             _all_ovr = overrides_module.load()
             _sku_ovr  = _all_ovr.get(selected_sku, {})
             _has_ovr  = bool(_sku_ovr)
@@ -907,25 +907,25 @@ with _tab_fc:
         delta_pct   = (mean_fc - last_4w) / last_4w * 100 if last_4w else 0
 
         kpi_row(
-            dict(label="Historical avg (last 4w)", value=f"{last_4w:.1f}"),
-            dict(label="Forecast avg (12w)",       value=f"{mean_fc:.1f}",
-                 delta=f"{delta_pct:+.1f}% vs recent",
+            dict(label="Promedio histórico (últ. 4 sem.)", value=f"{last_4w:.1f}"),
+            dict(label="Promedio forecast (12 sem.)",      value=f"{mean_fc:.1f}",
+                 delta=f"{delta_pct:+.1f}% vs reciente",
                  delta_cls="pos" if delta_pct >= 0 else "neg"),
-            *([dict(label="Avg uncertainty (std)", value=f"{std_fc:.1f}")] if std_fc else []),
+            *([dict(label="Incertidumbre promedio (std)", value=f"{std_fc:.1f}")] if std_fc else []),
         )
 
         # Override badge above chart
         if _has_ovr:
             st.html(
                 f'<div style="margin-bottom:6px;">'
-                f'<span class="badge badge-yellow">⚡ OVERRIDE ACTIVO — {selected_sku}</span>'
+                f'<span class="badge badge-yellow">⚡ AJUSTE ACTIVO — {selected_sku}</span>'
                 f'</div>'
             )
 
         fig = build_forecast_chart(hist_view, fc_view, chart_label, fc_override=_fc_override)
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-        with st.expander("FORECAST TABLE"):
+        with st.expander("TABLA DE FORECAST"):
             _ovr_mask = None
             if _has_ovr:
                 _ovr_mask = [pd.Timestamp(d).normalize() in _ovr_map for d in _fc_for_kpi["ds"]]
@@ -935,11 +935,11 @@ with _tab_fc:
                 st.caption("— IC no aplica para semanas con valor fijado manualmente")
 
         # ── Override manual (By SKU only) ─────────────────────────────────────
-        if vista == "By SKU":
-            with st.expander("OVERRIDE MANUAL", expanded=_has_ovr):
+        if vista == "Por SKU":
+            with st.expander("AJUSTE MANUAL", expanded=_has_ovr):
                 st.html(
                     f'<div style="font-size:11px;color:{C["text_2"]};margin-bottom:12px;line-height:1.6;">'
-                    f'Edita la columna <b style="color:{C["text_1"]}">Override</b> para sustituir el '
+                    f'Edita la columna <b style="color:{C["text_1"]}">Ajuste</b> para sustituir el '
                     f'forecast del modelo en semanas específicas. Deja vacío para usar el valor del modelo.'
                     f'</div>'
                 )
@@ -947,7 +947,7 @@ with _tab_fc:
                 _editor_df = pd.DataFrame({
                     "semana":          fc_view["ds"].dt.strftime("%Y-%m-%d").values,
                     "forecast_modelo": fc_view["AutoETS"].round(1).values,
-                    "override": [
+                    "ajuste": [
                         float(_sku_ovr[d.strftime("%Y-%m-%d")])
                         if d.strftime("%Y-%m-%d") in _sku_ovr else None
                         for d in fc_view["ds"]
@@ -963,8 +963,8 @@ with _tab_fc:
                         "forecast_modelo": st.column_config.NumberColumn(
                             "Forecast modelo", disabled=True, format="%.1f",
                         ),
-                        "override":        st.column_config.NumberColumn(
-                            "Override", min_value=0.0, step=0.5, format="%.1f",
+                        "ajuste":          st.column_config.NumberColumn(
+                            "Ajuste", min_value=0.0, step=0.5, format="%.1f",
                             help="Deja vacío para usar el forecast del modelo",
                         ),
                     },
@@ -976,19 +976,19 @@ with _tab_fc:
                 _c1, _c2 = st.columns(2)
                 with _c1:
                     if st.button(
-                        "✓  APLICAR OVERRIDE",
+                        "✓  APLICAR AJUSTE",
                         key=f"apply_ovr_{selected_sku}",
                         use_container_width=True,
                     ):
                         _save_rows = fc_view[["ds"]].copy().reset_index(drop=True)
-                        _save_rows["override"] = _edited["override"].values
-                        _n_mod = int(_edited["override"].notna().sum())
+                        _save_rows["override"] = _edited["ajuste"].values
+                        _n_mod = int(_edited["ajuste"].notna().sum())
                         overrides_module.set_sku(selected_sku, _save_rows)
-                        st.toast(f"✓ Override aplicado a {selected_sku} ({_n_mod} semanas modificadas)", icon="✅")
+                        st.toast(f"✓ Ajuste aplicado a {selected_sku} ({_n_mod} semanas modificadas)", icon="✅")
                         st.rerun()
                 with _c2:
                     _clear_clicked = st.button(
-                        "✕  LIMPIAR OVERRIDE",
+                        "✕  LIMPIAR AJUSTE",
                         key=f"clear_ovr_{selected_sku}",
                         disabled=not _has_ovr,
                         use_container_width=True,
@@ -997,7 +997,7 @@ with _tab_fc:
                         st.session_state[f"confirm_clear_{selected_sku}"] = True
 
                 if st.session_state.get(f"confirm_clear_{selected_sku}"):
-                    st.warning(f"¿Eliminar override de {selected_sku}? Esta acción no se puede deshacer.")
+                    st.warning(f"¿Eliminar ajuste de {selected_sku}? Esta acción no se puede deshacer.")
                     _cc1, _cc2 = st.columns(2)
                     with _cc1:
                         if st.button("Sí, eliminar", key=f"confirm_yes_{selected_sku}", use_container_width=True):
@@ -1018,13 +1018,13 @@ with _tab_mp:
     _r1_view, _r1_filter, _r1_pad = st.columns([3, 2, 2])
     with _r1_view:
         _pv = st.radio(
-            "View", _VIEW_OPTS,
+            "Vista", _VIEW_OPTS,
             index=_VIEW_OPTS.index(st.session_state["_shared_view"]),
             horizontal=True, key="model_perf_view",
         )
     st.session_state["_shared_view"] = _pv
     with _r1_filter:
-        if _pv == "By SKU":
+        if _pv == "Por SKU":
             st.html('<div style="height:28px"></div>')
             _mp_sku_idx = _all_skus.index(st.session_state["_shared_sku"]) \
                           if st.session_state["_shared_sku"] in _all_skus else 0
@@ -1033,7 +1033,7 @@ with _tab_mp:
                 key="model_perf_sku", label_visibility="collapsed",
             )
             st.session_state["_shared_sku"] = _pv_sku
-        elif _pv == "By Category":
+        elif _pv == "Por Categoría":
             st.html('<div style="height:28px"></div>')
             _mp_cat_idx = _all_cats.index(st.session_state["_shared_cat"]) \
                           if st.session_state["_shared_cat"] in _all_cats else 0
@@ -1074,7 +1074,7 @@ with _tab_mp:
             _p_run = None
         else:
             _p_run = st.selectbox(
-                "Forecast run date", _p_all_dates,
+                "Fecha de ejecución", _p_all_dates,
                 index=len(_p_all_dates) - 1,
                 format_func=_wfmt,
                 key="perf_run_date",
@@ -1101,11 +1101,11 @@ with _tab_mp:
             _p_num_cols = [c for c in _fc_run.columns
                            if c not in ("unique_id", "ds", "horizonte")]
 
-            if _pv == "By SKU":
+            if _pv == "Por SKU":
                 _fc_view = _fc_run[_fc_run["unique_id"] == _pv_sku].copy()
                 _hist_view = df[df["sku"] == _pv_sku][["fecha", "cantidad"]].copy()
                 _chart_lbl = _pv_sku
-            elif _pv == "By Category":
+            elif _pv == "Por Categoría":
                 _cat_skus = [s for s in df["sku"].unique()
                              if _get_category(s) == _pv_cat]
                 _grp_cols = (["ds", "horizonte"] if "horizonte" in _fc_run.columns
@@ -1116,13 +1116,13 @@ with _tab_mp:
                 _hist_view = (df[df["sku"].isin(_cat_skus)]
                               .groupby("fecha", as_index=False)["cantidad"].sum())
                 _chart_lbl = f"Category {_pv_cat}"
-            else:  # All
+            else:  # Todos
                 _grp_cols_a = (["ds", "horizonte"] if "horizonte" in _fc_run.columns
                                else ["ds"])
                 _fc_view = _fc_run.groupby(_grp_cols_a, as_index=False)[_p_num_cols].sum()
-                _fc_view["unique_id"] = "All SKUs"
+                _fc_view["unique_id"] = "Todos los SKUs"
                 _hist_view = df.groupby("fecha", as_index=False)["cantidad"].sum()
-                _chart_lbl = "All SKUs"
+                _chart_lbl = "Todos los SKUs"
 
             # ── Compute overlap: forecast vs actuals ──────────────────────────
             _p_overlap = _fc_view.merge(
@@ -1166,7 +1166,7 @@ with _tab_mp:
                 )
 
             # ── Section 1: Overview KPI cards ─────────────────────────────────
-            section(f"Overview — run: {_wfmt(_p_run)}  ·  {_chart_lbl}")
+            section(f"Resumen — ejecución: {_wfmt(_p_run)}  ·  {_chart_lbl}")
             kpi_row(
                 dict(label="MAPE H4",
                      value=_mh(4),
@@ -1180,14 +1180,14 @@ with _tab_mp:
                 dict(label="Bias H12",
                      value=_bh(12),
                      delta="all 12 horizons", delta_cls="neu"),
-                dict(label="Inside IC 70%",
+                dict(label="Dentro IC 70%",
                      value=(f"{_p_n_in}/{_p_n_tot}"
                             if _p_n_tot > 0 else "—"),
-                     delta=f"{_p_n_tot} realized weeks", delta_cls="neu"),
+                     delta=f"{_p_n_tot} semanas realizadas", delta_cls="neu"),
             )
 
             # ── Section 2: Forecast vs Actuals chart ──────────────────────────
-            section("Forecast vs Actuals")
+            section("Forecast vs. Real")
             _fig_h2 = build_forecast_history_chart(
                 _hist_view, _fc_view, _chart_lbl, _p_run,
             )
@@ -1195,15 +1195,15 @@ with _tab_mp:
                             config={"displayModeBar": False})
             st.html(
                 f'<div style="font-size:10px;color:{C["text_3"]};font-family:{C["mono"]};">'
-                f'● GREEN = actual within IC 70%  ·  '
-                f'● RED = actual outside IC 70%  ·  '
-                f'Blue dashed = run date  ·  '
-                f'{len(_p_all_dates)} runs available</div>'
+                f'● VERDE = real dentro IC 70%  ·  '
+                f'● ROJO = real fuera IC 70%  ·  '
+                f'Línea azul = fecha forecast  ·  '
+                f'{len(_p_all_dates)} ejecuciones disponibles</div>'
             )
 
             # ── Section 3: MAPE + BIAS by Horizon ────────────────────────────
             if _has_overlap and "horizonte" in _p_overlap.columns:
-                section("MAPE & Bias by Horizon")
+                section("MAPE & Bias por Horizonte")
                 _ph = (_p_overlap.groupby("horizonte")
                        .agg(mape=("ape", "mean"), bias=("pe", "mean"))
                        .mul(100).reset_index())
@@ -1234,7 +1234,7 @@ with _tab_mp:
                         legend=dict(bgcolor="rgba(0,0,0,0)", borderwidth=0,
                                     orientation="h", x=0, y=1.12),
                         xaxis=dict(
-                            title="Horizon week",
+                            title="Horizonte (semanas)",
                             showgrid=True, gridcolor=_GRID, zeroline=False,
                             tickmode="linear", tick0=1, dtick=1,
                             tickfont=dict(family="Courier New,monospace", size=10,
@@ -1255,12 +1255,12 @@ with _tab_mp:
                                     config={"displayModeBar": False})
 
             # ── Section 4: Detailed table ──────────────────────────────────────
-            if _pv in ("All", "By Category"):
-                section("Per-SKU Breakdown")
+            if _pv in ("Todos", "Por Categoría"):
+                section("Detalle por SKU")
                 _tbl_skus = (
                     [s for s in df["sku"].unique()
                      if _get_category(s) == _pv_cat]
-                    if _pv == "By Category"
+                    if _pv == "Por Categoría"
                     else list(df["sku"].unique())
                 )
                 _hist_long_p = df.rename(columns={"fecha": "ds", "sku": "unique_id"})
@@ -1321,15 +1321,15 @@ with _tab_mp:
                     st.html(
                         '<table class="acc-table"><thead><tr>'
                         '<th>SKU</th><th>MAPE H4</th><th>Bias H4</th>'
-                        '<th>MAPE H12</th><th>Bias H12</th><th>Inside IC 70%</th>'
+                        '<th>MAPE H12</th><th>Bias H12</th><th>Dentro IC 70%</th>'
                         '</tr></thead>'
                         f'<tbody>{_rows_html}</tbody></table>'
                     )
                     st.html(
                         f'<div style="font-size:10px;color:{C["text_3"]};'
                         f'margin-top:8px;font-family:{C["mono"]};">'
-                        f'MAPE: &lt;15% GOOD  15-25% WARN  &gt;25% BAD  |  '
-                        f'BIAS: positive = model overestimates</div>'
+                        f'MAPE: &lt;15% BUENO  15-25% ALERTA  &gt;25% MALO  |  '
+                        f'BIAS: positivo = modelo sobreestima</div>'
                     )
                 else:
                     st.html(
@@ -1339,7 +1339,7 @@ with _tab_mp:
 
 # ══ Tab 3: Sandbox ════════════════════════════════════════════════════════════
 with _tab_sb:
-    section("Live Demo Sandbox")
+    section("Simulador en vivo")
     st.html(
         f'<div class="info-box">Ingresa hasta 8 semanas de demanda y pulsa '
         f'<strong>▶ Calcular Forecast</strong>. La última fila corresponde a la semana '
@@ -1451,7 +1451,7 @@ with _tab_sb:
             st.html(
                 f'<div style="display:flex;align-items:center;justify-content:center;'
                 f'height:320px;color:{C["text_3"]};font-family:{C["mono"]};font-size:11px;'
-                f'letter-spacing:0.08em;">INGRESA DATOS Y PULSA ▶ CALCULAR FORECAST</div>'
+                f'letter-spacing:0.08em;">INGRESA DATOS Y PULSA ▶ CALCULAR</div>'
             )
 
 
@@ -1459,7 +1459,7 @@ with _tab_sb:
 st.html(
     f'<div style="border-top:1px solid {C["border"]};margin-top:32px;padding-top:12px;'
     f'font-size:10px;color:{C["text_3"]};font-family:{C["mono"]};letter-spacing:0.06em;">'
-    f'ABASTO · PHASE 1 · AutoETS (statsforecast {__import__("statsforecast").__version__}) · '
+    f'ABASTO · FASE 1 · AutoETS (statsforecast {__import__("statsforecast").__version__}) · '
     f'Streamlit · {_today}'
     f'</div>'
 )
