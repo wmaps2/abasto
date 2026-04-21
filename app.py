@@ -153,29 +153,27 @@ def _get_template_bytes() -> bytes:
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.html(f"""
-    <div style="padding:8px 0 20px 0;">
-        <div style="font-size:18px;font-weight:900;letter-spacing:0.1em;
+    <div style="padding:8px 0 16px 0;">
+        <div style="font-size:17px;font-weight:900;letter-spacing:0.1em;
                     color:{C['text_1']};">◈ ABASTO</div>
-        <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;
-                    color:{C['text_2']};margin-top:3px;">Supply Chain Intelligence</div>
+        <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;
+                    color:{C['text_2']};margin-top:2px;">Supply Chain</div>
     </div>
     """)
 
-    st.html(f'<div class="section-hdr">Datos</div>')
-
     _n_up = _count_uploaded()
-    _radio_opts = ["Demo (12 SKUs simulados)"]
+    _radio_opts = ["Demo"]
     if _n_up > 0:
-        _radio_opts.append(f"Datos subidos por usuario ({_n_up} SKUs)")
+        _radio_opts.append(f"Mis datos ({_n_up} SKUs)")
 
     _fuente_sel = st.radio(
-        "Fuente de datos",
+        "Fuente",
         options=_radio_opts,
         key="fuente_radio",
         label_visibility="collapsed",
     )
     _fuentes: tuple[str, ...] = (
-        ("uploaded",) if (_n_up > 0 and _fuente_sel != "Demo (12 SKUs simulados)")
+        ("uploaded",) if (_n_up > 0 and _fuente_sel != "Demo")
         else ("demo",)
     )
 
@@ -203,26 +201,26 @@ with st.sidebar:
             else:
                 st.error(f"Error cargando datos: {_exc}")
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.divider()
 
     # ── Download template ─────────────────────────────────────────────────────
     try:
         _tpl = _get_template_bytes()
         st.download_button(
-            "📥 Descargar plantilla",
+            "📥 Template",
             data=_tpl,
             file_name="abasto_template.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
     except Exception:
-        st.button("📥 Descargar plantilla (no disponible)", disabled=True, use_container_width=True)
+        st.button("📥 Template", disabled=True, use_container_width=True)
 
     # ── Upload Excel ──────────────────────────────────────────────────────────
     _up_file = st.file_uploader(
-        "📤 Cargar Excel",
+        "xlsx",
         type=["xlsx"],
-        label_visibility="visible",
+        label_visibility="collapsed",
         key="sidebar_xlsx_uploader",
     )
 
@@ -265,7 +263,7 @@ with st.sidebar:
             else:
                 _replace = bool(_conflicts) and st.session_state.get("_up_replace_ok", False)
                 if st.button("⬆ Confirmar carga", key="_btn_do_up", use_container_width=True):
-                    with st.spinner(f"Subiendo {_n_new} SKU(s) a Supabase…"):
+                    with st.spinner(f"Subiendo {_n_new} SKU(s)…"):
                         try:
                             _done = upload_module.upload_skus(_dm, _dd, replace=_replace)
                             for _k in ("_up_fid", "_up_parsed", "_up_conflicts", "_up_replace_ok"):
@@ -275,19 +273,19 @@ with st.sidebar:
                             st.cache_data.clear()
                             for _k in ("df", "forecast_results", "data_hash"):
                                 st.session_state.pop(_k, None)
-                            st.toast(f"✓ {len(_done)} SKU(s) cargados correctamente", icon="✅")
+                            st.toast(f"✓ {len(_done)} SKU(s) cargados", icon="✅")
                             st.rerun()
                         except upload_module.UploadError as _e:
                             st.error(str(_e))
 
     # ── Delete uploaded data ──────────────────────────────────────────────────
     if _n_up > 0:
-        st.markdown("---")
+        st.divider()
         if st.session_state.get("_confirm_del_up"):
-            st.warning(f"¿Borrar {_n_up} SKU(s) subidos? Irreversible.")
+            st.warning(f"¿Borrar {_n_up} SKU(s)? Irreversible.")
             _dc1, _dc2 = st.columns(2)
             with _dc1:
-                if st.button("Sí, borrar", key="_btn_del_yes", use_container_width=True):
+                if st.button("Sí", key="_btn_del_yes", use_container_width=True):
                     with st.spinner("Eliminando…"):
                         upload_module.delete_uploaded_data()
                     st.session_state.pop("_confirm_del_up", None)
@@ -298,10 +296,10 @@ with st.sidebar:
                         st.session_state.pop(_k, None)
                     st.rerun()
             with _dc2:
-                if st.button("Cancelar", key="_btn_del_no", use_container_width=True):
+                if st.button("No", key="_btn_del_no", use_container_width=True):
                     st.session_state.pop("_confirm_del_up", None)
         else:
-            if st.button("🗑️ Borrar datos de usuario",
+            if st.button("🗑️ Borrar datos",
                          key="_btn_del_trig", use_container_width=True,
                          type="secondary"):
                 st.session_state["_confirm_del_up"] = True
