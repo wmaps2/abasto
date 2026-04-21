@@ -1492,14 +1492,20 @@ with _tab_lab:
 
 # ══ Tab 3: Compra ═════════════════════════════════════════════════════════════
 with _tab_compra:
-    from pages.compra import main as _compra_main
-    _compra_main()
+    import importlib.util as _ilu
+    _spec_c = _ilu.spec_from_file_location("_compra_mod", Path(__file__).parent / "compra.py")
+    _compra_mod = _ilu.module_from_spec(_spec_c)
+    _spec_c.loader.exec_module(_compra_mod)
+    _compra_mod.main()
 
 
 # ══ Tab 5: Guía ═══════════════════════════════════════════════════════════════
 with _tab_inicio:
-    from pages.guia import main as _guia_main
-    _guia_main()
+    import importlib.util as _ilu
+    _spec_g = _ilu.spec_from_file_location("_guia_mod", Path(__file__).parent / "guia.py")
+    _guia_mod = _ilu.module_from_spec(_spec_g)
+    _spec_g.loader.exec_module(_guia_mod)
+    _guia_mod.main()
 
 
 # ─── Footer ───────────────────────────────────────────────────────────────────
