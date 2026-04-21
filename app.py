@@ -121,17 +121,20 @@ div[role="radiogroup"] > label:has(input:checked) {{
     font-weight: 700 !important;
     letter-spacing: 0.08em !important;
     text-transform: uppercase !important;
-    font-size: 11px !important;
+    font-size: 0 !important;
     width: 100% !important;
     padding: 10px 0 !important;
     font-family: {C['mono']} !important;
     cursor: pointer !important;
 }}
 [data-testid="stFileUploader"] button::before {{
-    content: "SUBIR ARCHIVO";
-}}
-[data-testid="stFileUploader"] button span {{
-    display: none !important;
+    content: "Subir archivo";
+    font-size: 11px !important;
+    color: {C['text_2']};
+    font-family: {C['mono']};
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }}
 .stSpinner > div > div {{ border-top-color: {C['blue']} !important; }}
 [data-testid="stNotification"] {{ border-radius: 6px !important; font-size: 12px !important; }}
