@@ -1204,7 +1204,24 @@ with _tab_mp:
             # ── Section 3: MAPE + BIAS by Horizon ────────────────────────────
             if _has_overlap and "horizonte" in _p_overlap.columns:
                 section("MAPE & Bias por Horizonte")
-                _ph = (_p_overlap.groupby("horizonte")
+                # Para vistas agregadas: calcular ape/pe por SKU individual antes
+                # de promediar por horizonte, para que errores +/- se cancelen correctamente.
+                if _pv == "Por SKU":
+                    _ph_src = _p_overlap.copy()
+                else:
+                    _chart_skus = (_cat_skus if _pv == "Por Categoría"
+                                   else list(df["sku"].unique()))
+                    _hist_long_ch = df.rename(columns={"fecha": "ds", "sku": "unique_id"})
+                    _ph_src = (_fc_run[_fc_run["unique_id"].isin(_chart_skus)]
+                               .merge(_hist_long_ch[["unique_id", "ds", "cantidad"]],
+                                      on=["unique_id", "ds"], how="inner"))
+                    _ph_src = _ph_src[_ph_src["cantidad"] > 0].copy()
+                    if not _ph_src.empty:
+                        _ph_src["ape"] = (np.abs(_ph_src["cantidad"] - _ph_src["AutoETS"])
+                                          / _ph_src["cantidad"])
+                        _ph_src["pe"]  = ((_ph_src["AutoETS"] - _ph_src["cantidad"])
+                                          / _ph_src["cantidad"])
+                _ph = (_ph_src.groupby("horizonte")
                        .agg(mape=("ape", "mean"), bias=("pe", "mean"))
                        .mul(100).reset_index())
                 if not _ph.empty:
