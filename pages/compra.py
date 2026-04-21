@@ -829,7 +829,7 @@ def main() -> None:
             _cat_opts = sorted(rep["categoria"].dropna().unique().tolist())
             selected_cat = st.selectbox(
                 "Categoría", _cat_opts,
-                format_func=lambda c: _CAT_LABELS.get(c, f"Categoría {c}"),
+                format_func=lambda c: f"Categoría {c}",
                 key="cat_compra",
                 label_visibility="collapsed",
             )
