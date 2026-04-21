@@ -448,18 +448,11 @@ def build_forecast_chart(
     ))
 
     ds = list(fc["ds"])
-    _ic_truncated = False
     if "AutoETS-lo-95" in fc.columns:
-        _raw_lo95 = list(fc["AutoETS-lo-95"])
-        if any(v < 0 for v in _raw_lo95):
-            _ic_truncated = True
-        _ci_band(fig, ds, [max(0.0, v) for v in _raw_lo95], list(fc["AutoETS-hi-95"]),
+        _ci_band(fig, ds, [max(0.0, v) for v in fc["AutoETS-lo-95"]], list(fc["AutoETS-hi-95"]),
                  "IC 95 %", "rgba(79,143,247,0.07)")
     if "AutoETS-lo-70" in fc.columns:
-        _raw_lo70 = list(fc["AutoETS-lo-70"])
-        if any(v < 0 for v in _raw_lo70):
-            _ic_truncated = True
-        _ci_band(fig, ds, [max(0.0, v) for v in _raw_lo70], list(fc["AutoETS-hi-70"]),
+        _ci_band(fig, ds, [max(0.0, v) for v in fc["AutoETS-lo-70"]], list(fc["AutoETS-hi-70"]),
                  "IC 70 %", "rgba(79,143,247,0.18)")
 
     # Anchor: prepend last historical point so forecast line connects without gap
@@ -518,14 +511,6 @@ def build_forecast_chart(
     )
     fig.update_xaxes(tickformat="W%W\n(%d-%m-%Y)")
     fig.update_yaxes(rangemode="nonnegative")
-    if _ic_truncated:
-        fig.add_annotation(
-            text="⚠ IC inferior truncado a 0 por alta variabilidad",
-            xref="paper", yref="paper",
-            x=0.01, y=0.02, showarrow=False,
-            font=dict(color=C["yellow"], size=10, family="Courier New,monospace"),
-            xanchor="left", yanchor="bottom",
-        )
     return fig
 
 
@@ -543,18 +528,11 @@ def build_forecast_history_chart(
     ))
 
     ds = list(fc["ds"])
-    _ic_truncated_h = False
     if "AutoETS-lo-95" in fc.columns:
-        _raw_lo95_h = list(fc["AutoETS-lo-95"])
-        if any(v < 0 for v in _raw_lo95_h):
-            _ic_truncated_h = True
-        _ci_band(fig, ds, [max(0.0, v) for v in _raw_lo95_h], list(fc["AutoETS-hi-95"]),
+        _ci_band(fig, ds, [max(0.0, v) for v in fc["AutoETS-lo-95"]], list(fc["AutoETS-hi-95"]),
                  "IC 95 %", "rgba(79,143,247,0.07)")
     if "AutoETS-lo-70" in fc.columns:
-        _raw_lo70_h = list(fc["AutoETS-lo-70"])
-        if any(v < 0 for v in _raw_lo70_h):
-            _ic_truncated_h = True
-        _ci_band(fig, ds, [max(0.0, v) for v in _raw_lo70_h], list(fc["AutoETS-hi-70"]),
+        _ci_band(fig, ds, [max(0.0, v) for v in fc["AutoETS-lo-70"]], list(fc["AutoETS-hi-70"]),
                  "IC 70 %", "rgba(79,143,247,0.18)")
 
     fig.add_trace(go.Scatter(
@@ -606,14 +584,6 @@ def build_forecast_history_chart(
     )
     fig.update_xaxes(tickformat="W%W\n(%d-%m-%Y)")
     fig.update_yaxes(rangemode="nonnegative")
-    if _ic_truncated_h:
-        fig.add_annotation(
-            text="⚠ IC inferior truncado a 0 por alta variabilidad",
-            xref="paper", yref="paper",
-            x=0.01, y=0.02, showarrow=False,
-            font=dict(color=C["yellow"], size=10, family="Courier New,monospace"),
-            xanchor="left", yanchor="bottom",
-        )
     return fig
 
 
