@@ -114,9 +114,9 @@ div[role="radiogroup"] > label:has(input:checked) {{
     display: none !important;
 }}
 [data-testid="stFileUploader"] button {{
-    background-color: {C['blue']} !important;
-    color: white !important;
-    border: none !important;
+    background-color: transparent !important;
+    color: {C['text_2']} !important;
+    border: 1px solid {C['border']} !important;
     border-radius: 6px !important;
     font-weight: 700 !important;
     letter-spacing: 0.08em !important;
@@ -126,6 +126,12 @@ div[role="radiogroup"] > label:has(input:checked) {{
     padding: 10px 0 !important;
     font-family: {C['mono']} !important;
     cursor: pointer !important;
+}}
+[data-testid="stFileUploader"] button::before {{
+    content: "SUBIR ARCHIVO";
+}}
+[data-testid="stFileUploader"] button span {{
+    display: none !important;
 }}
 .stSpinner > div > div {{ border-top-color: {C['blue']} !important; }}
 [data-testid="stNotification"] {{ border-radius: 6px !important; font-size: 12px !important; }}
@@ -235,14 +241,16 @@ with st.sidebar:
         try:
             _tpl = _get_template_bytes()
             st.download_button(
-                "📥 Template",
+                "Descargar template",
                 data=_tpl,
                 file_name="abasto_template.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
+                type="secondary",
             )
         except Exception:
-            st.button("📥 Template", disabled=True, use_container_width=True)
+            st.button("Descargar template", disabled=True, use_container_width=True,
+                      type="secondary")
 
         # ── Upload Excel ───────────────────────────────────────────────────────
         _up_file = st.file_uploader(
@@ -326,7 +334,7 @@ with st.sidebar:
                     if st.button("No", key="_btn_del_no", use_container_width=True):
                         st.session_state.pop("_confirm_del_up", None)
             else:
-                if st.button("🗑️ Borrar datos",
+                if st.button("Borrar datos",
                              key="_btn_del_trig", use_container_width=True,
                              type="secondary"):
                     st.session_state["_confirm_del_up"] = True
