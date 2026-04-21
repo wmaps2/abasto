@@ -179,20 +179,15 @@ with st.sidebar:
     """)
 
     _n_up = _count_uploaded()
-    _radio_opts = ["Demo"]
-    if _n_up > 0:
-        _radio_opts.append(f"Mis datos ({_n_up} SKUs)")
 
     _fuente_sel = st.radio(
         "Fuente",
-        options=_radio_opts,
+        options=["Demo", "Datos usuario"],
         key="fuente_radio",
         label_visibility="collapsed",
     )
-    _fuentes: tuple[str, ...] = (
-        ("uploaded",) if (_n_up > 0 and _fuente_sel != "Demo")
-        else ("demo",)
-    )
+    _es_demo = (_fuente_sel == "Demo")
+    _fuentes: tuple[str, ...] = ("demo",) if _es_demo else ("uploaded",)
 
     # Invalidate forecast when source changes
     if st.session_state.get("_last_fuentes") != _fuentes:
@@ -218,108 +213,123 @@ with st.sidebar:
             else:
                 st.error(f"Error cargando datos: {_exc}")
 
-    st.divider()
-
-    # ── Download template ─────────────────────────────────────────────────────
-    try:
-        _tpl = _get_template_bytes()
-        st.download_button(
-            "📥 Template",
-            data=_tpl,
-            file_name="abasto_template.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
+    # ── SKU count ─────────────────────────────────────────────────────────────
+    if _es_demo:
+        _df_now = st.session_state.get("df")
+        _n_demo = _df_now["sku"].nunique() if _df_now is not None else 0
+        st.html(
+            f'<div style="font-size:11px;color:{C["text_2"]};'
+            f'font-family:{C["mono"]};padding:6px 0 2px 0;">'
+            f'{_n_demo} SKUs · simulados</div>'
         )
-    except Exception:
-        st.button("📥 Template", disabled=True, use_container_width=True)
+    else:
+        st.html(
+            f'<div style="font-size:11px;color:{C["text_2"]};'
+            f'font-family:{C["mono"]};padding:6px 0 2px 0;">'
+            f'{_n_up} SKUs cargados</div>'
+        )
 
-    # ── Upload Excel ──────────────────────────────────────────────────────────
-    _up_file = st.file_uploader(
-        "xlsx",
-        type=["xlsx"],
-        label_visibility="collapsed",
-        key="sidebar_xlsx_uploader",
-    )
+        st.divider()
 
-    if _up_file is not None:
-        _fid = f"{_up_file.name}_{_up_file.size}"
-        if st.session_state.get("_up_fid") != _fid:
-            st.session_state["_up_fid"] = _fid
-            for _k in ("_up_parsed", "_up_conflicts", "_up_replace_ok"):
-                st.session_state.pop(_k, None)
+        # ── Download template ──────────────────────────────────────────────────
+        try:
+            _tpl = _get_template_bytes()
+            st.download_button(
+                "📥 Template",
+                data=_tpl,
+                file_name="abasto_template.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+        except Exception:
+            st.button("📥 Template", disabled=True, use_container_width=True)
 
-        if "_up_parsed" not in st.session_state:
-            try:
-                _dm, _dd = upload_module.parse_upload(_up_file)
-                st.session_state["_up_parsed"]    = (_dm, _dd)
-                st.session_state["_up_conflicts"] = upload_module.check_conflicts(
-                    _dm["sku_id"].tolist()
-                )
-            except upload_module.UploadError as _e:
-                st.error(str(_e))
+        # ── Upload Excel ───────────────────────────────────────────────────────
+        _up_file = st.file_uploader(
+            "xlsx",
+            type=["xlsx"],
+            label_visibility="collapsed",
+            key="sidebar_xlsx_uploader",
+        )
 
-        if "_up_parsed" in st.session_state:
-            _dm, _dd   = st.session_state["_up_parsed"]
-            _conflicts = st.session_state.get("_up_conflicts", [])
-            _n_new     = len(_dm)
+        if _up_file is not None:
+            _fid = f"{_up_file.name}_{_up_file.size}"
+            if st.session_state.get("_up_fid") != _fid:
+                st.session_state["_up_fid"] = _fid
+                for _k in ("_up_parsed", "_up_conflicts", "_up_replace_ok"):
+                    st.session_state.pop(_k, None)
 
-            st.html(f'<div class="ok-box">✓ {_n_new} SKU(s) listos</div>')
+            if "_up_parsed" not in st.session_state:
+                try:
+                    _dm, _dd = upload_module.parse_upload(_up_file)
+                    st.session_state["_up_parsed"]    = (_dm, _dd)
+                    st.session_state["_up_conflicts"] = upload_module.check_conflicts(
+                        _dm["sku_id"].tolist()
+                    )
+                except upload_module.UploadError as _e:
+                    st.error(str(_e))
 
-            if _conflicts and not st.session_state.get("_up_replace_ok"):
-                st.warning(f"Ya existen: {', '.join(_conflicts)}. ¿Reemplazar?")
-                _rc1, _rc2 = st.columns(2)
-                with _rc1:
-                    if st.button("Reemplazar", key="_btn_rep_yes", use_container_width=True):
-                        st.session_state["_up_replace_ok"] = True
-                        st.rerun()
-                with _rc2:
-                    if st.button("Cancelar", key="_btn_rep_no", use_container_width=True):
-                        for _k in ("_up_fid", "_up_parsed", "_up_conflicts", "_up_replace_ok"):
-                            st.session_state.pop(_k, None)
-                        st.rerun()
-            else:
-                _replace = bool(_conflicts) and st.session_state.get("_up_replace_ok", False)
-                if st.button("⬆ Confirmar carga", key="_btn_do_up", use_container_width=True):
-                    with st.spinner(f"Subiendo {_n_new} SKU(s)…"):
-                        try:
-                            _done = upload_module.upload_skus(_dm, _dd, replace=_replace)
+            if "_up_parsed" in st.session_state:
+                _dm, _dd   = st.session_state["_up_parsed"]
+                _conflicts = st.session_state.get("_up_conflicts", [])
+                _n_new     = len(_dm)
+
+                st.html(f'<div class="ok-box">✓ {_n_new} SKU(s) listos</div>')
+
+                if _conflicts and not st.session_state.get("_up_replace_ok"):
+                    st.warning(f"Ya existen: {', '.join(_conflicts)}. ¿Reemplazar?")
+                    _rc1, _rc2 = st.columns(2)
+                    with _rc1:
+                        if st.button("Reemplazar", key="_btn_rep_yes", use_container_width=True):
+                            st.session_state["_up_replace_ok"] = True
+                            st.rerun()
+                    with _rc2:
+                        if st.button("Cancelar", key="_btn_rep_no", use_container_width=True):
                             for _k in ("_up_fid", "_up_parsed", "_up_conflicts", "_up_replace_ok"):
                                 st.session_state.pop(_k, None)
-                            _load_sb_historia.clear()
-                            _count_uploaded.clear()
-                            st.cache_data.clear()
-                            for _k in ("df", "forecast_results", "data_hash"):
-                                st.session_state.pop(_k, None)
-                            st.toast(f"✓ {len(_done)} SKU(s) cargados", icon="✅")
                             st.rerun()
-                        except upload_module.UploadError as _e:
-                            st.error(str(_e))
+                else:
+                    _replace = bool(_conflicts) and st.session_state.get("_up_replace_ok", False)
+                    if st.button("⬆ Confirmar carga", key="_btn_do_up", use_container_width=True):
+                        with st.spinner(f"Subiendo {_n_new} SKU(s)…"):
+                            try:
+                                _done = upload_module.upload_skus(_dm, _dd, replace=_replace)
+                                for _k in ("_up_fid", "_up_parsed", "_up_conflicts", "_up_replace_ok"):
+                                    st.session_state.pop(_k, None)
+                                _load_sb_historia.clear()
+                                _count_uploaded.clear()
+                                st.cache_data.clear()
+                                for _k in ("df", "forecast_results", "data_hash"):
+                                    st.session_state.pop(_k, None)
+                                st.toast(f"✓ {len(_done)} SKU(s) cargados", icon="✅")
+                                st.rerun()
+                            except upload_module.UploadError as _e:
+                                st.error(str(_e))
 
-    # ── Delete uploaded data ──────────────────────────────────────────────────
-    if _n_up > 0:
-        st.divider()
-        if st.session_state.get("_confirm_del_up"):
-            st.warning(f"¿Borrar {_n_up} SKU(s)? Irreversible.")
-            _dc1, _dc2 = st.columns(2)
-            with _dc1:
-                if st.button("Sí", key="_btn_del_yes", use_container_width=True):
-                    with st.spinner("Eliminando…"):
-                        upload_module.delete_uploaded_data()
-                    st.session_state.pop("_confirm_del_up", None)
-                    _load_sb_historia.clear()
-                    _count_uploaded.clear()
-                    st.cache_data.clear()
-                    for _k in ("df", "forecast_results", "data_hash"):
-                        st.session_state.pop(_k, None)
-                    st.rerun()
-            with _dc2:
-                if st.button("No", key="_btn_del_no", use_container_width=True):
-                    st.session_state.pop("_confirm_del_up", None)
-        else:
-            if st.button("🗑️ Borrar datos",
-                         key="_btn_del_trig", use_container_width=True,
-                         type="secondary"):
-                st.session_state["_confirm_del_up"] = True
+        # ── Delete uploaded data ───────────────────────────────────────────────
+        if _n_up > 0:
+            if st.session_state.get("_confirm_del_up"):
+                st.warning(f"¿Borrar {_n_up} SKU(s)? Irreversible.")
+                _dc1, _dc2 = st.columns(2)
+                with _dc1:
+                    if st.button("Sí", key="_btn_del_yes", use_container_width=True):
+                        with st.spinner("Eliminando…"):
+                            upload_module.delete_uploaded_data()
+                        st.session_state.pop("_confirm_del_up", None)
+                        _load_sb_historia.clear()
+                        _count_uploaded.clear()
+                        st.cache_data.clear()
+                        for _k in ("df", "forecast_results", "data_hash"):
+                            st.session_state.pop(_k, None)
+                        st.rerun()
+                with _dc2:
+                    if st.button("No", key="_btn_del_no", use_container_width=True):
+                        st.session_state.pop("_confirm_del_up", None)
+            else:
+                if st.button("🗑️ Borrar datos",
+                             key="_btn_del_trig", use_container_width=True,
+                             type="secondary"):
+                    st.session_state["_confirm_del_up"] = True
 
 
 # ─── Navigate ─────────────────────────────────────────────────────────────────
