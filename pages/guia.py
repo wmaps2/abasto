@@ -96,9 +96,7 @@ def main() -> None:
             El archivo tiene la siguiente estructura:
 
             - **Fila 1**: headers (no modificar)
-            - **Fila 2**: advertencia — **BORRA ESTA FILA** antes de subir
-            - **Filas 3–14**: SKUs demo de referencia — **BORRA ESTAS FILAS** antes de subir
-            - **Fila 15 en adelante**: tus SKUs reales
+            - **Filas 2–N**: SKUs demo de referencia — **BORRA ESTAS FILAS** antes de subir tus datos
             """
         )
 
@@ -139,11 +137,10 @@ def main() -> None:
         st.subheader("Paso 3 — Llenar tus datos")
         st.write(
             """
-            1. Borra la fila 2 (advertencia).
-            2. Borra las filas 3–14 (SKUs demo de referencia).
-            3. Agrega tus SKUs a partir de la fila 2.
-            4. Completa la demanda histórica semanal para cada SKU.
-            5. Guarda el archivo.
+            1. Borra las filas de SKUs demo (filas 2–N).
+            2. Agrega tus SKUs a partir de la fila 2.
+            3. Completa la demanda histórica semanal para cada SKU.
+            4. Guarda el archivo.
             """
         )
 
