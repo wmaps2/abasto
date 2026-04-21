@@ -498,11 +498,17 @@ def build_forecast_chart(
             hovertemplate="%{x|W%W (%d-%m-%Y)}  <b>%{y:.1f}</b><extra>Naive</extra>",
         ))
 
-    last_str = hist["fecha"].max().strftime("%Y-%m-%d")
-    _vline(fig, last_str, C["text_3"], "Inicio forecast")
+    _hist_max = hist["fecha"].dropna().max() if not hist.empty else None
+    _fc_max   = fc["ds"].dropna().max()    if not fc.empty  else None
+    if _hist_max is not None and pd.notna(_hist_max):
+        last_str = _hist_max.strftime("%Y-%m-%d")
+        _vline(fig, last_str, C["text_3"], "Inicio forecast")
+    else:
+        last_str = None
 
-    x_start = (hist["fecha"].max() - pd.Timedelta(weeks=12)).strftime("%Y-%m-%d")
-    x_end   = fc["ds"].max().strftime("%Y-%m-%d")
+    _x_start_ts = (_hist_max - pd.Timedelta(weeks=12)) if _hist_max is not None and pd.notna(_hist_max) else None
+    x_start = _x_start_ts.strftime("%Y-%m-%d") if _x_start_ts is not None else None
+    x_end   = _fc_max.strftime("%Y-%m-%d") if _fc_max is not None and pd.notna(_fc_max) else None
 
     fig = _dark_layout(
         fig,
@@ -583,13 +589,14 @@ def build_forecast_history_chart(
             ))
 
     run_str  = pd.Timestamp(run_date).strftime("%Y-%m-%d")
-    last_str = last_hist.strftime("%Y-%m-%d")
+    last_str = last_hist.strftime("%Y-%m-%d") if pd.notna(last_hist) else run_str
     _vline(fig, run_str, C["blue"], "Fecha del forecast")
     if run_str != last_str:
         _vline(fig, last_str, C["text_3"], "Último dato", y_label=0.82)
 
     x_start = (pd.Timestamp(run_date) - pd.Timedelta(weeks=8)).strftime("%Y-%m-%d")
-    x_end   = fc["ds"].max().strftime("%Y-%m-%d")
+    _fc_max2 = fc["ds"].dropna().max() if not fc.empty else None
+    x_end   = _fc_max2.strftime("%Y-%m-%d") if _fc_max2 is not None and pd.notna(_fc_max2) else run_str
 
     fig = _dark_layout(
         fig,
