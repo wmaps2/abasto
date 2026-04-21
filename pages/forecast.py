@@ -930,7 +930,12 @@ with _tab_fc:
             if _has_ovr:
                 _ovr_mask = [pd.Timestamp(d).normalize() in _ovr_map for d in _fc_for_kpi["ds"]]
             tbl = build_forecast_table(_fc_for_kpi, override_mask=_ovr_mask)
-            st.dataframe(tbl, use_container_width=True, hide_index=True)
+            _tbl_col_cfg = {
+                col: st.column_config.NumberColumn(format="%.1f")
+                for col in tbl.columns if col != "SEMANA"
+            }
+            st.dataframe(tbl, use_container_width=True, hide_index=True,
+                         column_config=_tbl_col_cfg)
             if _has_ovr:
                 st.caption("— IC no aplica para semanas con valor fijado manualmente")
 
