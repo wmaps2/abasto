@@ -812,7 +812,7 @@ if "_shared_cat" not in st.session_state:
     st.session_state["_shared_cat"] = _all_cats[0]
 
 # ─── Navigation ───────────────────────────────────────────────────────────────
-_tab_fc, _tab_mp, _tab_compra, _tab_sb, _tab_guia = st.tabs(["Forecast", "Rendimiento del modelo", "Compra", "Simulador", "Guía"])
+_tab_inicio, _tab_fc, _tab_compra, _tab_acc, _tab_lab = st.tabs(["Inicio", "Forecast", "Compra", "Accuracy", "Laboratorio"])
 
 # ══ Tab 1: Forecast ═══════════════════════════════════════════════════════════
 with _tab_fc:
@@ -1016,7 +1016,7 @@ with _tab_fc:
 
 
 # ══ Tab 2: Model Performance ══════════════════════════════════════════════════
-with _tab_mp:
+with _tab_acc:
 
     # ── Controls ─────────────────────────────────────────────────────────────
     # ── Row 1: View radio + conditional SKU/Category dropdown ────────────────
@@ -1373,7 +1373,7 @@ with _tab_mp:
 
 
 # ══ Tab 3: Sandbox ════════════════════════════════════════════════════════════
-with _tab_sb:
+with _tab_lab:
     section("Simulador en vivo")
     st.html(
         f'<div class="info-box">Ingresa hasta 8 semanas de demanda y pulsa '
@@ -1497,7 +1497,7 @@ with _tab_compra:
 
 
 # ══ Tab 5: Guía ═══════════════════════════════════════════════════════════════
-with _tab_guia:
+with _tab_inicio:
     from pages._5_guia import main as _guia_main
     _guia_main()
 
