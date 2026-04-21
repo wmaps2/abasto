@@ -834,8 +834,8 @@ with _tab_fc:
             _fc_cat_idx = _all_cats.index(st.session_state["_shared_cat"]) \
                           if st.session_state["_shared_cat"] in _all_cats else 0
             selected_cat = st.selectbox(
-                "Category", _all_cats, index=_fc_cat_idx,
-                format_func=lambda c: f"Category {c}",
+                "Categoría", _all_cats, index=_fc_cat_idx,
+                format_func=lambda c: f"Categoría {c}",
                 key="forecast_cat",
                 label_visibility="collapsed",
             )
@@ -866,7 +866,7 @@ with _tab_fc:
         n_cat = sum(1 for s in df["sku"].unique() if _get_category(s) == selected_cat)
         st.caption(f"{n_cat} SKU(s) · aggregated (sum)")
         hist_view, fc_view = _aggregate_by_category(df, forecasts, selected_cat)
-        chart_label = f"Category {selected_cat}"
+        chart_label = f"Categoría {selected_cat}"
 
     if fc_view.empty:
         st.html('<div class="warn-box">Sin forecast para esta selección.</div>')
@@ -1038,8 +1038,8 @@ with _tab_mp:
             _mp_cat_idx = _all_cats.index(st.session_state["_shared_cat"]) \
                           if st.session_state["_shared_cat"] in _all_cats else 0
             _pv_cat = st.selectbox(
-                "Category", _all_cats, index=_mp_cat_idx,
-                format_func=lambda c: f"Category {c}",
+                "Categoría", _all_cats, index=_mp_cat_idx,
+                format_func=lambda c: f"Categoría {c}",
                 key="model_perf_cat", label_visibility="collapsed",
             )
             st.session_state["_shared_cat"] = _pv_cat
@@ -1112,10 +1112,10 @@ with _tab_mp:
                              else ["ds"])
                 _fc_view = (_fc_run[_fc_run["unique_id"].isin(_cat_skus)]
                             .groupby(_grp_cols, as_index=False)[_p_num_cols].sum())
-                _fc_view["unique_id"] = f"Category {_pv_cat}"
+                _fc_view["unique_id"] = f"Categoría {_pv_cat}"
                 _hist_view = (df[df["sku"].isin(_cat_skus)]
                               .groupby("fecha", as_index=False)["cantidad"].sum())
-                _chart_lbl = f"Category {_pv_cat}"
+                _chart_lbl = f"Categoría {_pv_cat}"
             else:  # Todos
                 _grp_cols_a = (["ds", "horizonte"] if "horizonte" in _fc_run.columns
                                else ["ds"])
