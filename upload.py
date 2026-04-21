@@ -19,6 +19,7 @@ DEMO_SKUS: frozenset[str] = frozenset([
 META_COLS = [
     "sku_id", "categoria", "lead_time_semanas",
     "costo", "precio", "costo_reputacional", "tasa_obsolescencia_semanal",
+    "stock_disponible", "en_transito", "fecha_llegada_transito",
 ]
 
 
@@ -118,10 +119,15 @@ def build_template_xlsx() -> bytes:
             else pd.DataFrame(columns=["sku_id", "fecha", "demanda"]))
     hist["fecha"] = pd.to_datetime(hist["fecha"]).dt.strftime("%Y-%m-%d")
 
+    # Inventario por SKU demo
+    inv_rows = sb.table("inventario").select("*").in_("sku_id", list(DEMO_SKUS)).execute().data
+    inv_dict = {r["sku_id"]: r for r in inv_rows}
+
     data_rows: list[dict] = []
     for _, p in prods.iterrows():
         sid = str(p.get("sku_id", ""))
         h   = hist[hist["sku_id"] == sid].set_index("fecha")["demanda"].to_dict()
+        inv = inv_dict.get(sid, {})
         row: dict = {
             "sku_id":                     sid,
             "categoria":                  p.get("categoria", ""),
@@ -130,6 +136,9 @@ def build_template_xlsx() -> bytes:
             "precio":                     float(precio_dict.get(sid, 0) or 0),
             "costo_reputacional":         float(p.get("costo_reputacional", 0) or 0),
             "tasa_obsolescencia_semanal": float(p.get("tasa_obsolescencia_semanal", 0) or 0),
+            "stock_disponible":           int(inv.get("stock_disponible") or 0),
+            "en_transito":                int(inv.get("en_transito") or 0),
+            "fecha_llegada_transito":     inv.get("fecha_llegada_transito") or "",
         }
         for d in dates:
             v = h.get(d)
@@ -325,11 +334,23 @@ def upload_skus(
                 hist_rows[i:i+BATCH], on_conflict="sku_id,fecha"
             ).execute()
 
-        # inventario
-        demand_series = pd.Series([float(v) if not pd.isna(v) else 0.0 for v in vals[first_i:last_i + 1]])
-        stock, transito, fecha_llegada = _calc_inventory(
-            sku_id, categoria, lead_time, demand_series
-        )
+        # inventario — usar valores del template si existen, si no auto-calcular
+        _stock_raw   = meta.get("stock_disponible")
+        _trans_raw   = meta.get("en_transito")
+        _fecha_raw   = meta.get("fecha_llegada_transito")
+        _has_inv     = not (pd.isna(_stock_raw) if _stock_raw is not None else True)
+
+        if _has_inv:
+            stock          = int(float(_stock_raw) if not pd.isna(_stock_raw) else 0)
+            transito       = int(float(_trans_raw) if _trans_raw is not None and not pd.isna(_trans_raw) else 0)
+            fecha_llegada  = (str(_fecha_raw).strip()
+                              if _fecha_raw is not None and str(_fecha_raw).strip() not in ("", "nan", "NaT")
+                              else (_last_monday() + timedelta(weeks=1)).strftime("%Y-%m-%d"))
+        else:
+            demand_series = pd.Series([float(v) if not pd.isna(v) else 0.0 for v in vals[first_i:last_i + 1]])
+            stock, transito, fecha_llegada = _calc_inventory(
+                sku_id, categoria, lead_time, demand_series
+            )
         sb.table("inventario").upsert({
             "sku_id":                 sku_id,
             "stock_disponible":       stock,
