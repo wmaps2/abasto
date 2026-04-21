@@ -825,6 +825,14 @@ def main() -> None:
                 key="sku_compra",
                 label_visibility="collapsed",
             )
+        elif vista == "Por Categoría":
+            _cat_opts = sorted(rep["categoria"].dropna().unique().tolist())
+            selected_cat = st.selectbox(
+                "Categoría", _cat_opts,
+                format_func=lambda c: _CAT_LABELS.get(c, f"Categoría {c}"),
+                key="cat_compra",
+                label_visibility="collapsed",
+            )
 
     # ── Content based on vista ────────────────────────────────────────────────
     if vista == "Por SKU":
@@ -833,11 +841,7 @@ def main() -> None:
 
     elif vista == "Por Categoría":
         st.html('<div class="section-hdr">TABLA DE REPOSICIÓN</div>')
-        pass  # categoria ya viene de compute_replenishment (BD)
-        tabs = st.tabs(["Categoría A · Alta rotación", "Categoría B · Media", "Categoría C · Baja rotación"])
-        for tab, cat in zip(tabs, ["A", "B", "C"]):
-            with tab:
-                _render_table(rep[rep["categoria"] == cat].copy(), ovr_skus=_ovr_skus)
+        _render_table(rep[rep["categoria"] == selected_cat].copy(), ovr_skus=_ovr_skus)
         st.html('<div class="section-hdr">RESUMEN POR CATEGORÍA</div>')
         _render_category_summary(rep, ovr_skus=_ovr_skus)
 

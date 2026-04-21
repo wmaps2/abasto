@@ -712,6 +712,18 @@ def _load_all_sb_dates() -> list[str]:
         return []
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_sku_cat_map(fuente: str) -> dict[str, str]:
+    try:
+        prods = data_module.get_productos()
+        if "fuente" in prods.columns:
+            prods = prods[prods["fuente"] == fuente]
+        return {row["sku"]: str(row.get("categoria", "?"))[:1].upper() or "?"
+                for _, row in prods.iterrows()}
+    except Exception:
+        return {}
+
+
 @st.cache_data(ttl=300)
 def _load_fc_run(date_str: str) -> pd.DataFrame:
     """Load all SKUs + horizons for one run date from Supabase (includes horizonte col)."""
@@ -784,6 +796,10 @@ if df is None:
     )
     st.stop()
 
+_fuente = st.session_state.get("data_source", "demo")
+_sku_cat_map = _load_sku_cat_map(_fuente)
+_get_category = lambda s: _sku_cat_map.get(s, "?")  # noqa: E731
+
 current_hash = _df_hash(df)
 if st.session_state.get("data_hash") != current_hash:
     _clear_results()
@@ -817,7 +833,7 @@ cv_skipped = results.get("cv_skipped", [])
 # ─── Shared view state (synced across tabs via session_state) ────────────────
 _VIEW_OPTS = ["By SKU", "By Category", "All"]
 _all_skus  = sorted(df["sku"].unique())
-_all_cats  = sorted({_get_category(s) for s in df["sku"].unique()})
+_all_cats  = sorted({_get_category(s) for s in df["sku"].unique()} - {"?"})
 if "_shared_view" not in st.session_state:
     st.session_state["_shared_view"] = "By SKU"
 if "_shared_sku" not in st.session_state:
