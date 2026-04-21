@@ -1,11 +1,12 @@
 """
 simulation/avanzar_semana.py
-Simulador semanal: genera demanda para nuevas semanas y avanza el tránsito.
+Simulador semanal: genera demanda, avanza tránsito y recalcula forecasts.
 
 Uso:
     python avanzar_semana.py             # avanzar 1 semana
     python avanzar_semana.py --weeks 4   # avanzar 4 semanas
     python avanzar_semana.py --dry-run   # ver qué haría sin ejecutar
+    python avanzar_semana.py --skip-forecast  # solo demanda + tránsito
 """
 from __future__ import annotations
 
@@ -111,9 +112,53 @@ def _actualizar_transito(sb, dias: int, dry_run: bool) -> int:
     return len(rows)
 
 
+# ─── Forecast ─────────────────────────────────────────────────────────────────
+
+def _generar_forecast(sb, fecha_calculo: pd.Timestamp, dry_run: bool) -> None:
+    import data as data_module
+    import forecasting as fc_module
+
+    print("\nCargando historial para forecast...")
+    df = data_module.get_historia_semanal(fuentes=["demo"])
+    if df.empty:
+        print("  ! Historial vacío — forecast omitido")
+        return
+
+    n_skus = df["sku"].nunique()
+    n_sem  = df["fecha"].nunique()
+    print(f"  {n_skus} SKUs x {n_sem} semanas")
+
+    sf_df  = fc_module._to_sf(df)
+    counts = sf_df.groupby("unique_id")["ds"].count()
+    n_min  = int(counts.min())
+    minfo  = fc_module.select_model(n_min)
+    print(f"  Modelo: {minfo.name}")
+
+    print("  Ejecutando forecast (puede tardar ~60s)...")
+    fc_df = fc_module.run_forecast(df, minfo)
+    if fc_df.empty:
+        print("  ! Forecast vacío — no se guardó")
+        return
+
+    n_rows = len(fc_df)
+    print(f"  {n_rows} filas generadas")
+
+    if dry_run:
+        print("  [DRY-RUN] Forecast no guardado en Supabase")
+        return
+
+    # Borrar forecasts previos para esta misma fecha_calculo (idempotente)
+    d_from = fecha_calculo.strftime("%Y-%m-%dT00:00:00")
+    d_to   = fecha_calculo.strftime("%Y-%m-%dT23:59:59")
+    sb.table("forecasts").delete().gte("fecha_calculo", d_from).lte("fecha_calculo", d_to).execute()
+
+    fc_module._sb_write_forecast(fc_df, minfo, fecha_calculo)
+    print(f"  OK {n_rows} filas guardadas en forecasts (fecha_calculo={fecha_calculo.date()})")
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
-def main(n_weeks: int = 1, dry_run: bool = False) -> None:
+def main(n_weeks: int = 1, dry_run: bool = False, skip_forecast: bool = False) -> None:
     tag = " [DRY-RUN]" if dry_run else ""
     print(f"\n=== SIMULADOR SEMANAL{tag} ===")
 
@@ -164,7 +209,13 @@ def main(n_weeks: int = 1, dry_run: bool = False) -> None:
     n_trans = _actualizar_transito(sb, dias_transito, dry_run)
     print(f"  OK {n_trans} registros actualizados")
 
+    # 5. Recalcular forecast con el historial actualizado
     fecha_final = ultima_fecha + pd.Timedelta(weeks=n_weeks)
+    if not skip_forecast:
+        _generar_forecast(sb, fecha_final, dry_run)
+    else:
+        print("\n[--skip-forecast] Forecast omitido")
+
     print(f"\n=== COMPLETADO{tag} ===")
     if n_weeks == 1:
         print(f"Nueva semana agregada : {fecha_final.strftime('%Y-%m-%d')}\n")
@@ -186,5 +237,9 @@ if __name__ == "__main__":
         "--dry-run", action="store_true",
         help="Muestra qué haría sin insertar nada en Supabase",
     )
+    parser.add_argument(
+        "--skip-forecast", action="store_true",
+        help="Omite el recálculo de forecast (solo demanda + tránsito)",
+    )
     args = parser.parse_args()
-    main(n_weeks=args.weeks, dry_run=args.dry_run)
+    main(n_weeks=args.weeks, dry_run=args.dry_run, skip_forecast=args.skip_forecast)
