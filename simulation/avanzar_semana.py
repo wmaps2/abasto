@@ -75,7 +75,7 @@ def _insertar_semana(
             "evento_tipo": 0,
             "fuente":      "demo",
         })
-        print(f"  ✓ {sku}: {demanda:,} unidades")
+        print(f"  OK {sku}: {demanda:,} unidades")
 
     if not dry_run:
         sb.table("historia_semanal").upsert(rows, on_conflict="sku_id,fecha").execute()
@@ -162,7 +162,7 @@ def main(n_weeks: int = 1, dry_run: bool = False) -> None:
     dias_transito = 7 * n_weeks
     print(f"\nActualizando tránsito (+{dias_transito} días)...")
     n_trans = _actualizar_transito(sb, dias_transito, dry_run)
-    print(f"  ✓ {n_trans} registros actualizados")
+    print(f"  OK {n_trans} registros actualizados")
 
     fecha_final = ultima_fecha + pd.Timedelta(weeks=n_weeks)
     print(f"\n=== COMPLETADO{tag} ===")
