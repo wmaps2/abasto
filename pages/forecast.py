@@ -1493,7 +1493,7 @@ with _tab_lab:
 # ══ Tab 3: Compra ═════════════════════════════════════════════════════════════
 with _tab_compra:
     import importlib.util as _ilu
-    _spec_c = _ilu.spec_from_file_location("_compra_mod", Path(__file__).parent / "compra.py")
+    _spec_c = _ilu.spec_from_file_location("_compra_mod", Path(__file__).parent / "_compra.py")
     _compra_mod = _ilu.module_from_spec(_spec_c)
     _spec_c.loader.exec_module(_compra_mod)
     _compra_mod.main()
@@ -1502,7 +1502,7 @@ with _tab_compra:
 # ══ Tab 5: Guía ═══════════════════════════════════════════════════════════════
 with _tab_inicio:
     import importlib.util as _ilu
-    _spec_g = _ilu.spec_from_file_location("_guia_mod", Path(__file__).parent / "guia.py")
+    _spec_g = _ilu.spec_from_file_location("_guia_mod", Path(__file__).parent / "_guia.py")
     _guia_mod = _ilu.module_from_spec(_spec_g)
     _spec_g.loader.exec_module(_guia_mod)
     _guia_mod.main()
