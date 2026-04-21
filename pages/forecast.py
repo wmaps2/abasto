@@ -1240,7 +1240,7 @@ with _tab_mp:
                         line=dict(color="#FF8C42", width=2, dash="dot"),
                         marker=dict(size=7, color="#FF8C42",
                                     line=dict(color=C["bg_card"], width=1.5)),
-                        hovertemplate="H%{x}  <b>%{y:+.1f}%</b><extra>Bias</extra>",
+                        hovertemplate="H%{x}  <b>%{y:.1f}%</b><extra>Bias</extra>",
                     ))
                     _fig_ph.update_layout(
                         template="plotly_dark",
