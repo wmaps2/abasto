@@ -101,6 +101,9 @@ div[role="radiogroup"] > label:has(input:checked) {{
 [data-testid="stFileUploader"] label {{
     color: {C['text_2']} !important; font-size: 12px !important;
 }}
+[data-testid="stFileUploader"] small {{
+    display: none !important;
+}}
 .stSpinner > div > div {{ border-top-color: {C['blue']} !important; }}
 [data-testid="stNotification"] {{ border-radius: 6px !important; font-size: 12px !important; }}
 .section-hdr {{
@@ -193,15 +196,6 @@ with st.sidebar:
                 )
             else:
                 st.error(f"Error cargando datos: {_exc}")
-
-    _df_sidebar = st.session_state.get("df")
-    if _df_sidebar is not None:
-        _info = data_module.summary(_df_sidebar)
-        st.html(
-            f'<div class="ok-box">✓ {_info["n_skus"]} SKUs · {_info["n_weeks"]} semanas<br>'
-            f'<span style="font-weight:400;color:{C["text_2"]};font-size:11px;">'
-            f'{_info["date_min"]} → {_info["date_max"]}</span></div>'
-        )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -302,7 +296,8 @@ with st.sidebar:
                     st.session_state.pop("_confirm_del_up", None)
         else:
             if st.button("🗑️ Borrar datos de usuario",
-                         key="_btn_del_trig", use_container_width=True):
+                         key="_btn_del_trig", use_container_width=True,
+                         type="secondary"):
                 st.session_state["_confirm_del_up"] = True
 
 
