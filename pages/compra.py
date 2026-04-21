@@ -404,8 +404,7 @@ def compute_replenishment(
         lt        = int(prod["lead_time_semanas"])
         cv        = float(prod["cv_demanda"])
         tasa_obs  = float(prod["tasa_obsolescencia_semanal"])
-        _parts = sku.split("-")
-        cat = _parts[1][0].upper() if len(_parts) > 1 and _parts[1] else str(prod.get("categoria", "A"))[:1].upper() or "A"
+        cat = str(prod.get("categoria", "A"))[:1].upper() or "A"
 
         st_row = stock[stock["sku"] == sku]
         if st_row.empty:
@@ -574,7 +573,7 @@ _CAT_LABELS = {"A": "A · Abarrotes", "B": "B · Moda/Temporada", "C": "C · Dur
 def _render_category_summary(rep: pd.DataFrame, ovr_skus: set | None = None) -> None:
     if "categoria" not in rep.columns:
         rep = rep.copy()
-        rep["categoria"] = rep["sku"].str.extract(r"SKU-([ABC])")
+        rep["categoria"] = "A"
 
     cols = st.columns(3)
     for col, cat in zip(cols, ["A", "B", "C"]):
@@ -834,7 +833,7 @@ def main() -> None:
 
     elif vista == "Por Categoría":
         st.html('<div class="section-hdr">TABLA DE REPOSICIÓN</div>')
-        rep["categoria"] = rep["sku"].str.extract(r"SKU-([ABC])")
+        pass  # categoria ya viene de compute_replenishment (BD)
         tabs = st.tabs(["Categoría A · Alta rotación", "Categoría B · Media", "Categoría C · Baja rotación"])
         for tab, cat in zip(tabs, ["A", "B", "C"]):
             with tab:
