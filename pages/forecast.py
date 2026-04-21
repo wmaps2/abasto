@@ -812,7 +812,7 @@ if "_shared_cat" not in st.session_state:
     st.session_state["_shared_cat"] = _all_cats[0]
 
 # ─── Navigation ───────────────────────────────────────────────────────────────
-_tab_fc, _tab_mp, _tab_sb, _tab_compra = st.tabs(["Forecast", "Rendimiento del modelo", "Simulador", "Compra"])
+_tab_fc, _tab_mp, _tab_compra, _tab_sb, _tab_guia = st.tabs(["Forecast", "Rendimiento del modelo", "Compra", "Simulador", "Guía"])
 
 # ══ Tab 1: Forecast ═══════════════════════════════════════════════════════════
 with _tab_fc:
@@ -1490,10 +1490,16 @@ with _tab_sb:
             )
 
 
-# ══ Tab 4: Compra ═════════════════════════════════════════════════════════════
+# ══ Tab 3: Compra ═════════════════════════════════════════════════════════════
 with _tab_compra:
     from pages.compra import main as _compra_main
     _compra_main()
+
+
+# ══ Tab 5: Guía ═══════════════════════════════════════════════════════════════
+with _tab_guia:
+    from pages._5_guia import main as _guia_main
+    _guia_main()
 
 
 # ─── Footer ───────────────────────────────────────────────────────────────────
