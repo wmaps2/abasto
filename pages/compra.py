@@ -404,7 +404,8 @@ def compute_replenishment(
         lt        = int(prod["lead_time_semanas"])
         cv        = float(prod["cv_demanda"])
         tasa_obs  = float(prod["tasa_obsolescencia_semanal"])
-        cat       = sku.split("-")[1][0]   # 'A', 'B' or 'C'
+        _parts = sku.split("-")
+        cat = _parts[1][0].upper() if len(_parts) > 1 and _parts[1] else str(prod.get("categoria", "A"))[:1].upper() or "A"
 
         st_row = stock[stock["sku"] == sku]
         if st_row.empty:
