@@ -184,22 +184,20 @@ def main(dry_run: bool = False, skip_forecast: bool = False) -> None:
     ultima_fecha         = pd.Timestamp(fecha_rows[-1]["fecha"])
     n_semanas_existentes = len(fecha_rows)
     lunes_hoy            = _lunes_de_hoy()
+    ultimo_lunes_completo = lunes_hoy - pd.Timedelta(weeks=1)  # semana que ya terminó
 
-    print(f"\nÚltima fecha en BD : {ultima_fecha.strftime('%Y-%m-%d')}")
-    print(f"Lunes de hoy       : {lunes_hoy.strftime('%Y-%m-%d')}")
-    print(f"Semanas existentes : {n_semanas_existentes}")
+    print(f"\nÚltima fecha en BD       : {ultima_fecha.strftime('%Y-%m-%d')}")
+    print(f"Última semana completa   : {ultimo_lunes_completo.strftime('%Y-%m-%d')}")
+    print(f"Lunes de hoy (forecast)  : {lunes_hoy.strftime('%Y-%m-%d')}")
+    print(f"Semanas existentes       : {n_semanas_existentes}")
 
-    # Semanas a agregar = diferencia entre lunes de hoy y último dato
-    n_weeks = int((lunes_hoy - ultima_fecha).days // 7)
+    # Semanas a agregar = semanas completas que faltan (excluye la semana en curso)
+    n_weeks = int((ultimo_lunes_completo - ultima_fecha).days // 7)
 
     if n_weeks <= 0:
-        print("\nLa BD ya está al día para esta semana. Nada que agregar.")
-        if not skip_forecast:
-            print("\nEjecutando forecast de todas formas con datos actuales...")
-            _generar_forecast(sb, lunes_hoy, dry_run)
-        return
-
-    print(f"Semanas a agregar  : {n_weeks}  ({ultima_fecha.strftime('%d/%m')} → {lunes_hoy.strftime('%d/%m/%Y')})")
+        print("\nDemanda al día. No hay semanas completas nuevas que agregar.")
+    else:
+        print(f"Semanas a agregar  : {n_weeks}  ({ultima_fecha.strftime('%d/%m')} → {ultimo_lunes_completo.strftime('%d/%m/%Y')})")
 
     # 2. Precio más reciente por SKU
     precio_rows = (sb.table("historia_semanal")
@@ -213,31 +211,34 @@ def main(dry_run: bool = False, skip_forecast: bool = False) -> None:
         if r["sku_id"] not in precio_por_sku:
             precio_por_sku[r["sku_id"]] = float(r["precio"] or 0)
 
-    # 3. Insertar semanas faltantes hasta lunes de hoy
-    for w in range(n_weeks):
-        nueva_fecha = ultima_fecha + pd.Timedelta(weeks=w + 1)
-        week_idx    = n_semanas_existentes + w
+    if n_weeks > 0:
+        # 3. Insertar semanas completas faltantes
+        for w in range(n_weeks):
+            nueva_fecha = ultima_fecha + pd.Timedelta(weeks=w + 1)
+            week_idx    = n_semanas_existentes + w
 
-        print(f"\nSemana {w + 1}/{n_weeks} : {nueva_fecha.strftime('%Y-%m-%d')}")
-        _insertar_semana(sb, nueva_fecha, week_idx, precio_por_sku, dry_run)
+            print(f"\nSemana {w + 1}/{n_weeks} : {nueva_fecha.strftime('%Y-%m-%d')}")
+            _insertar_semana(sb, nueva_fecha, week_idx, precio_por_sku, dry_run)
 
-    # 4. Avanzar tránsito (7 días × semanas agregadas)
-    dias_transito = 7 * n_weeks
-    print(f"\nActualizando tránsito (+{dias_transito} días)...")
-    n_trans = _actualizar_transito(sb, dias_transito, dry_run)
-    print(f"  OK {n_trans} registros actualizados")
+        # 4. Avanzar tránsito (7 días × semanas agregadas)
+        dias_transito = 7 * n_weeks
+        print(f"\nActualizando tránsito (+{dias_transito} días)...")
+        n_trans = _actualizar_transito(sb, dias_transito, dry_run)
+        print(f"  OK {n_trans} registros actualizados")
 
-    # 5. Forecast con fecha_calculo = lunes de hoy
+    # 5. Forecast siempre con fecha_calculo = lunes de hoy
     if not skip_forecast:
         _generar_forecast(sb, lunes_hoy, dry_run)
     else:
         print("\n[--skip-forecast] Forecast omitido")
 
     print(f"\n=== COMPLETADO{tag} ===")
-    if n_weeks == 1:
-        print(f"Semana agregada : {lunes_hoy.strftime('%Y-%m-%d')}\n")
+    if n_weeks == 0:
+        print(f"Demanda sin cambios. Forecast actualizado al {lunes_hoy.strftime('%Y-%m-%d')}\n")
+    elif n_weeks == 1:
+        print(f"Semana agregada : {ultimo_lunes_completo.strftime('%Y-%m-%d')} · Forecast al {lunes_hoy.strftime('%Y-%m-%d')}\n")
     else:
-        print(f"{n_weeks} semanas agregadas hasta : {lunes_hoy.strftime('%Y-%m-%d')}\n")
+        print(f"{n_weeks} semanas agregadas hasta {ultimo_lunes_completo.strftime('%Y-%m-%d')} · Forecast al {lunes_hoy.strftime('%Y-%m-%d')}\n")
 
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
