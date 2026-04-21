@@ -43,28 +43,30 @@ def _last_monday(ts: pd.Timestamp) -> pd.Timestamp:
     return (ts - pd.Timedelta(days=ts.weekday())).normalize()
 
 
-def _get_existing_dates(sb, cutoff_dates: list[pd.Timestamp]) -> set[str]:
+def _get_existing_sku_dates(sb, cutoff_dates: list[pd.Timestamp]) -> dict[str, set]:
     """
-    Consulta Supabase y retorna el conjunto de fechas (YYYY-MM-DD) que ya
-    tienen al menos un registro en `forecasts` dentro del rango de cutoffs.
-    Se compara contra la parte de fecha de `fecha_calculo`.
+    Retorna {date_str: {sku_id, ...}} para el rango de cutoffs.
+    Permite saber qué SKUs ya tienen forecast en cada fecha.
     """
     if not cutoff_dates:
-        return set()
+        return {}
 
     min_dt = min(cutoff_dates).strftime("%Y-%m-%dT00:00:00")
     max_dt = max(cutoff_dates).strftime("%Y-%m-%dT23:59:59")
 
     rows = (
         sb.table("forecasts")
-          .select("fecha_calculo")
+          .select("sku_id,fecha_calculo")
           .gte("fecha_calculo", min_dt)
           .lte("fecha_calculo", max_dt)
           .execute()
           .data
     )
-    # Extraer solo la parte de fecha (los primeros 10 caracteres de ISO timestamp)
-    return {r["fecha_calculo"][:10] for r in rows}
+    result: dict[str, set] = {}
+    for r in rows:
+        d = r["fecha_calculo"][:10]
+        result.setdefault(d, set()).add(r["sku_id"])
+    return result
 
 
 def _build_rows(
@@ -113,23 +115,27 @@ def _batch_insert(sb, rows: list[dict], dry_run: bool = False) -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-def main(n_weeks: int = DEFAULT_WEEKS, dry_run: bool = False) -> None:
+def main(
+    n_weeks: int = DEFAULT_WEEKS,
+    dry_run: bool = False,
+    fuentes: list[str] | None = None,
+) -> None:
     tag = " [DRY-RUN]" if dry_run else ""
+    fuentes_tag = f" [{','.join(fuentes)}]" if fuentes else ""
     print("=" * 60)
-    print(f"BACKFILL FORECASTS -- últimas {n_weeks} semanas{tag}")
+    print(f"BACKFILL FORECASTS -- últimas {n_weeks} semanas{tag}{fuentes_tag}")
     print("=" * 60)
 
-    # -- 1. Cargar histórico completo ------------------------------------------
+    # -- 1. Cargar histórico --------------------------------------------------
     print("\n[1/4] Cargando histórico desde Supabase...")
-    df_full   = data_module.get_historia_semanal()
+    df_full   = data_module.get_historia_semanal(fuentes=fuentes) if fuentes else data_module.get_historia_semanal()
     last_date = df_full["fecha"].max()
-    n_skus    = df_full["sku"].nunique()
+    all_skus  = set(df_full["sku"].unique())
+    n_skus    = len(all_skus)
     print(f"  -> {n_skus} SKUs, {df_full['fecha'].nunique()} semanas")
     print(f"  -> Rango: {df_full['fecha'].min().date()} -> {last_date.date()}")
 
-    # -- 2. Calcular fechas de cutoff ------------------------------------------
-    # Los cutoffs son los últimos N lunes (hacia atrás desde hoy), dentro del
-    # rango de datos disponibles.
+    # -- 2. Calcular fechas de cutoff -----------------------------------------
     today_mon    = _last_monday(pd.Timestamp.now())
     all_cutoffs  = [today_mon - pd.Timedelta(weeks=w) for w in range(n_weeks - 1, -1, -1)]
     cutoff_dates = [d for d in all_cutoffs if d <= last_date]
@@ -141,17 +147,25 @@ def main(n_weeks: int = DEFAULT_WEEKS, dry_run: bool = False) -> None:
     print(f"\n[2/4] Cutoffs: {cutoff_dates[0].date()} -> {cutoff_dates[-1].date()}"
           f"  ({len(cutoff_dates)} semanas)")
 
-    # -- 3. Idempotencia: fechas que ya existen --------------------------------
-    print("\n[3/4] Verificando fechas existentes en Supabase...")
-    sb       = fc_module._sb_client()
-    existing = _get_existing_dates(sb, cutoff_dates)
+    # -- 3. Idempotencia per-SKU: qué (fecha, sku) ya existen -----------------
+    print("\n[3/4] Verificando forecasts existentes en Supabase (per-SKU)...")
+    sb              = fc_module._sb_client()
+    existing_by_date = _get_existing_sku_dates(sb, cutoff_dates)
 
-    pending  = [d for d in cutoff_dates if d.strftime("%Y-%m-%d") not in existing]
-    n_skip   = len(cutoff_dates) - len(pending)
-    print(f"  -> {n_skip} ya existen (salteadas) . {len(pending)} pendientes")
+    # Para cada cutoff: calcular SKUs faltantes
+    pending: list[tuple[pd.Timestamp, set]] = []
+    for d in cutoff_dates:
+        date_str = d.strftime("%Y-%m-%d")
+        already  = existing_by_date.get(date_str, set())
+        missing  = all_skus - already
+        if missing:
+            pending.append((d, missing))
+
+    n_skip = len(cutoff_dates) - len(pending)
+    print(f"  -> {n_skip} fechas completas (salteadas) · {len(pending)} fechas con SKUs faltantes")
 
     if not pending:
-        print("\nOK Nada que hacer -- todas las fechas ya están en Supabase.")
+        print("\nOK Nada que hacer -- todos los SKUs ya tienen forecast en cada fecha.")
         return
 
     # -- 4. Generar e insertar forecasts ---------------------------------------
@@ -160,11 +174,12 @@ def main(n_weeks: int = DEFAULT_WEEKS, dry_run: bool = False) -> None:
     total_ok    = 0
     errors: list[tuple] = []
 
-    for cutoff in tqdm(pending, desc="Semanas", unit="sem", ncols=70):
+    for cutoff, missing_skus in tqdm(pending, desc="Semanas", unit="sem", ncols=70):
         try:
-            df_train = df_full[df_full["fecha"] <= cutoff].copy()
+            df_train = df_full[(df_full["fecha"] <= cutoff) &
+                               (df_full["sku"].isin(missing_skus))].copy()
             counts   = df_train.groupby("sku")["fecha"].count()
-            n_min    = int(counts.min())
+            n_min    = int(counts.min()) if not counts.empty else 0
 
             if n_min < 4:
                 tqdm.write(f"  !  {cutoff.date()}: SKU con solo {n_min} sem -- saltando")

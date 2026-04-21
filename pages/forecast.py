@@ -1054,7 +1054,7 @@ with _tab_mp:
     _p_sb_set    = set(_p_sb_dates)
     _p_all_dates = _p_sb_dates + [d for d in _p_local_dates if d not in _p_sb_set]
 
-    # ── Backfill prompt when no / insufficient historical forecasts ───────────
+    # ── Backfill: forecasts históricos faltantes ──────────────────────────────
     if not _p_all_dates or len(_p_all_dates) < 5:
         st.info("ℹ️ Forecasts históricos pendientes para análisis de accuracy.")
         if st.button("📊 Generar forecasts históricos (~2 min)",
@@ -1065,6 +1065,19 @@ with _tab_mp:
             _load_all_sb_dates.clear()
             _load_fc_run.clear()
             st.toast("✓ Forecasts históricos generados", icon="✅")
+            st.rerun()
+
+    # Botón siempre visible para completar forecasts de SKUs subidos por usuario
+    _fuente_mp = st.session_state.get("data_source", "demo")
+    if _fuente_mp == "uploaded":
+        if st.button("📊 Completar forecasts faltantes (~2 min)",
+                     key="_btn_backfill_uploaded", use_container_width=False):
+            with st.spinner("Calculando forecasts faltantes para SKUs subidos…"):
+                from simulation import backfill_forecasts
+                backfill_forecasts.main(n_weeks=24, fuentes=["uploaded"])
+            _load_all_sb_dates.clear()
+            _load_fc_run.clear()
+            st.toast("✓ Forecasts completados", icon="✅")
             st.rerun()
 
     # ── Row 2: Forecast run date dropdown ─────────────────────────────────────
