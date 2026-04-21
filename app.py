@@ -310,6 +310,6 @@ with st.sidebar:
 # ─── Navigate ─────────────────────────────────────────────────────────────────
 pg = st.navigation([
     st.Page("pages/forecast.py", title="Forecast"),
-    st.Page("pages/compra.py",   title="Compra"),
+    st.Page("pages/5_guia.py",   title="📖 Guía"),
 ])
 pg.run()
