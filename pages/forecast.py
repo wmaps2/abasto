@@ -1498,7 +1498,7 @@ with _tab_compra:
 
 # ══ Tab 5: Guía ═══════════════════════════════════════════════════════════════
 with _tab_inicio:
-    from pages._5_guia import main as _guia_main
+    from pages.guia import main as _guia_main
     _guia_main()
 
 
