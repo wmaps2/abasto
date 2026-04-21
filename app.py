@@ -99,16 +99,33 @@ div[role="radiogroup"] > label:has(input:checked) {{
     border-color: {C['blue']};
     background: {C['blue_dim']};
 }}
-[data-testid="stFileUploader"] {{
-    background: {C['bg_card']};
-    border: 1px dashed {C['border']};
-    border-radius: 8px;
+[data-testid="stFileUploaderDropzone"] {{
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+}}
+[data-testid="stFileUploaderDropzoneInstructions"] {{
+    display: none !important;
 }}
 [data-testid="stFileUploader"] label {{
-    color: {C['text_2']} !important; font-size: 12px !important;
+    display: none !important;
 }}
 [data-testid="stFileUploader"] small {{
     display: none !important;
+}}
+[data-testid="stFileUploader"] button {{
+    background-color: {C['blue']} !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 6px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    font-size: 11px !important;
+    width: 100% !important;
+    padding: 10px 0 !important;
+    font-family: {C['mono']} !important;
+    cursor: pointer !important;
 }}
 .stSpinner > div > div {{ border-top-color: {C['blue']} !important; }}
 [data-testid="stNotification"] {{ border-radius: 6px !important; font-size: 12px !important; }}
