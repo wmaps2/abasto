@@ -1200,5 +1200,5 @@ def _render_projection_chart(proj: pd.DataFrame, row: pd.Series) -> None:
 
 
 # ─── Entry point ──────────────────────────────────────────────────────────────
-if __name__ == "__main__" or True:
+if __name__ == "__main__":
     main()

@@ -812,7 +812,7 @@ if "_shared_cat" not in st.session_state:
     st.session_state["_shared_cat"] = _all_cats[0]
 
 # ─── Navigation ───────────────────────────────────────────────────────────────
-_tab_fc, _tab_mp, _tab_sb = st.tabs(["Forecast", "Rendimiento del modelo", "Simulador"])
+_tab_fc, _tab_mp, _tab_sb, _tab_compra = st.tabs(["Forecast", "Rendimiento del modelo", "Simulador", "Compra"])
 
 # ══ Tab 1: Forecast ═══════════════════════════════════════════════════════════
 with _tab_fc:
@@ -1488,6 +1488,12 @@ with _tab_sb:
                 f'height:320px;color:{C["text_3"]};font-family:{C["mono"]};font-size:11px;'
                 f'letter-spacing:0.08em;">INGRESA DATOS Y PULSA ▶ CALCULAR</div>'
             )
+
+
+# ══ Tab 4: Compra ═════════════════════════════════════════════════════════════
+with _tab_compra:
+    from pages.compra import main as _compra_main
+    _compra_main()
 
 
 # ─── Footer ───────────────────────────────────────────────────────────────────
