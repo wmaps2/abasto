@@ -78,6 +78,12 @@ section[data-testid="stSidebar"] h3 {{
     color: {C['text_3']} !important;
     opacity: 1 !important;
 }}
+.stButton > button[kind="secondary"] {{
+    background-color: transparent !important;
+    color: {C['text_2']} !important;
+    border: 1px solid {C['border']} !important;
+}}
+.stButton > button[kind="secondary"]:hover {{ opacity: 0.7 !important; }}
 .stRadio [data-testid="stMarkdownContainer"] p {{
     color: {C['text_1']} !important; font-size: 13px !important;
 }}
