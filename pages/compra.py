@@ -327,12 +327,12 @@ def _normal_ppf(p: float) -> float:
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)
 def _load_productos() -> pd.DataFrame:
     return data_module.get_productos()
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)
 def _load_stock() -> pd.DataFrame:
     return data_module.get_inventario()
 

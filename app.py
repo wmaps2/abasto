@@ -273,6 +273,7 @@ with st.sidebar:
                                 st.session_state.pop(_k, None)
                             _load_sb_historia.clear()
                             _count_uploaded.clear()
+                            st.cache_data.clear()
                             for _k in ("df", "forecast_results", "data_hash"):
                                 st.session_state.pop(_k, None)
                             st.rerun()
@@ -311,6 +312,7 @@ with st.sidebar:
                     st.session_state.pop("_confirm_del_up", None)
                     _load_sb_historia.clear()
                     _count_uploaded.clear()
+                    st.cache_data.clear()
                     for _k in ("df", "forecast_results", "data_hash"):
                         st.session_state.pop(_k, None)
                     st.rerun()
