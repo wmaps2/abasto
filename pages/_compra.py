@@ -743,23 +743,15 @@ def main() -> None:
     n_urgente   = (rep["semaforo_label"] == "urgente").sum()
     n_total     = len(rep)
 
-    # ── Generate orders button ────────────────────────────────────────────────
-    _btn_col, _exp_col = st.columns([3, 1])
-    with _btn_col:
-        run_orders = st.button(
-            "⟳  GENERAR ÓRDENES DE COMPRA",
-            use_container_width=True,
-        )
+    # ── Export CSV ────────────────────────────────────────────────────────────
     _csv_fname = f"compra_{pd.Timestamp.today().strftime('%Y%m%d')}.csv"
-    with _exp_col:
-        if st.download_button(
-            label="↓  EXPORTAR CSV",
-            data=csv_bytes,
-            file_name=_csv_fname,
-            mime="text/csv",
-            use_container_width=True,
-        ):
-            st.toast(f"✓ CSV exportado: {_csv_fname} ({len(rep)} SKUs)", icon="✅")
+    if st.download_button(
+        label="↓  EXPORTAR CSV",
+        data=csv_bytes,
+        file_name=_csv_fname,
+        mime="text/csv",
+    ):
+        st.toast(f"✓ CSV exportado: {_csv_fname} ({len(rep)} SKUs)", icon="✅")
 
     # ── Stats summary ─────────────────────────────────────────────────────────
     st.html(f"""
@@ -774,13 +766,6 @@ def main() -> None:
       {'<div class="mc-row">Con ajuste<span style="color:' + C["yellow"] + '">' + str(len(_ovr_skus)) + '</span></div>' if _ovr_skus else ''}
     </div>
     """)
-
-    if "rep_computed" not in st.session_state or run_orders:
-        st.session_state["rep_computed"] = True
-        if run_orders:
-            n_orders   = int((rep["order_qty"] > 0).sum())
-            total_cost = float(rep[rep["order_qty"] > 0]["order_cost"].sum())
-            st.toast(f"✓ {n_orders} órdenes generadas por ${total_cost:,.0f}", icon="✅")
 
     # ── Global KPIs ───────────────────────────────────────────────────────────
     total_order_cost = rep[rep["order_qty"] > 0]["order_cost"].sum()
