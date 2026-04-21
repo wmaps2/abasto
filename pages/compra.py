@@ -705,9 +705,20 @@ def main() -> None:
     # ── Load data ─────────────────────────────────────────────────────────────
     _fuente = st.session_state.get("data_source", "demo")
     with st.spinner("Cargando forecast y datos de inventario…"):
-        productos = _load_productos()
-        stock     = _load_stock()
-        fc_res    = _load_forecast(override_hash=_get_override_hash(), fuente=_fuente)
+        _all_productos = _load_productos()
+        stock          = _load_stock()
+        fc_res         = _load_forecast(override_hash=_get_override_hash(), fuente=_fuente)
+
+    # Filter productos to active data source
+    if "fuente" in _all_productos.columns:
+        productos = _all_productos[_all_productos["fuente"] == _fuente].copy()
+    else:
+        from upload import DEMO_SKUS as _DEMO_SKUS
+        productos = (
+            _all_productos[_all_productos["sku"].isin(_DEMO_SKUS)].copy()
+            if _fuente == "demo"
+            else _all_productos[~_all_productos["sku"].isin(_DEMO_SKUS)].copy()
+        )
 
     if fc_res is None:
         st.error("No se pudo cargar el forecast. Ve a la página Forecast primero.")
