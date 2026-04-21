@@ -731,7 +731,12 @@ def main() -> None:
     _ovr_skus = set(_ovr_all.keys())
 
     # ── Compute replenishment ─────────────────────────────────────────────────
-    rep       = compute_replenishment(productos, stock, fc_res)
+    rep = compute_replenishment(productos, stock, fc_res)
+
+    if rep.empty:
+        st.html('<div class="warn-box">No hay datos de inventario para los SKUs seleccionados.</div>')
+        return
+
     csv_bytes = _build_export_csv(rep)
 
     n_con_orden = (rep["order_qty"] > 0).sum()
