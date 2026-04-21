@@ -136,7 +136,7 @@ def _count_uploaded() -> int:
     return upload_module.get_uploaded_count()
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def _get_template_bytes() -> bytes:
     return upload_module.build_template_xlsx()
 
