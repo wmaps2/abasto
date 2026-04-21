@@ -1068,14 +1068,23 @@ with _tab_mp:
     _p_sb_set    = set(_p_sb_dates)
     _p_all_dates = _p_sb_dates + [d for d in _p_local_dates if d not in _p_sb_set]
 
+    # ── Backfill prompt when no / insufficient historical forecasts ───────────
+    if not _p_all_dates or len(_p_all_dates) < 5:
+        st.info("ℹ️ Forecasts históricos pendientes para análisis de accuracy.")
+        if st.button("📊 Generar forecasts históricos (~2 min)",
+                     key="_btn_backfill_mp", use_container_width=False):
+            with st.spinner("Generando forecasts históricos para todos los SKUs…"):
+                from simulation import backfill_forecasts
+                backfill_forecasts.main(n_weeks=24)
+            _load_all_sb_dates.clear()
+            _load_fc_run.clear()
+            st.toast("✓ Forecasts históricos generados", icon="✅")
+            st.rerun()
+
     # ── Row 2: Forecast run date dropdown ─────────────────────────────────────
     _r2_date, _r2_pad = st.columns([3, 4])
     with _r2_date:
         if not _p_all_dates:
-            st.html(
-                '<div class="warn-box">No hay historial de forecasts. '
-                'Ejecuta el backfill o Forzar recalculo.</div>'
-            )
             _p_run = None
         else:
             _p_run = st.selectbox(

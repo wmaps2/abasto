@@ -268,7 +268,6 @@ with st.sidebar:
                     with st.spinner(f"Subiendo {_n_new} SKU(s) a Supabase…"):
                         try:
                             _done = upload_module.upload_skus(_dm, _dd, replace=_replace)
-                            st.session_state["_just_uploaded"] = _done
                             for _k in ("_up_fid", "_up_parsed", "_up_conflicts", "_up_replace_ok"):
                                 st.session_state.pop(_k, None)
                             _load_sb_historia.clear()
@@ -276,28 +275,10 @@ with st.sidebar:
                             st.cache_data.clear()
                             for _k in ("df", "forecast_results", "data_hash"):
                                 st.session_state.pop(_k, None)
+                            st.toast(f"✓ {len(_done)} SKU(s) cargados correctamente", icon="✅")
                             st.rerun()
                         except upload_module.UploadError as _e:
                             st.error(str(_e))
-
-    # ── Post-upload ───────────────────────────────────────────────────────────
-    if st.session_state.get("_just_uploaded"):
-        _done_ids = st.session_state["_just_uploaded"]
-        st.toast(f"✓ {len(_done_ids)} SKU(s) cargados", icon="✅")
-        st.html(
-            f'<div class="ok-box">✓ {len(_done_ids)} SKU(s) guardados:<br>'
-            f'<span style="font-size:11px;">{", ".join(_done_ids)}</span></div>'
-        )
-        if st.button("📊 Generar forecasts históricos (~2 min)",
-                     key="_btn_backfill", use_container_width=True):
-            with st.spinner("Generando forecasts históricos…"):
-                from simulation import backfill_forecasts
-                backfill_forecasts.main(n_weeks=24)
-            st.session_state.pop("_just_uploaded", None)
-            st.rerun()
-        if st.button("Cerrar", key="_btn_close_up", use_container_width=True):
-            st.session_state.pop("_just_uploaded", None)
-            st.rerun()
 
     # ── Delete uploaded data ──────────────────────────────────────────────────
     if _n_up > 0:
